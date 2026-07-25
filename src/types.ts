@@ -203,6 +203,36 @@ export interface AppState {
   aiRecognitionSettings?: AiRecognitionSettings;
   aiRecognitionHistory?: AiRecognitionHistory[];
   posterTemplates?: PosterTemplate[];
+  userProfile?: UserProfile;
 }
 
 
+
+export interface UserProfile {
+  fullName: string;
+  username: string;
+  email: string;
+  mobile: string;
+  dob: string;
+  address: string;
+  city: string;
+  state: string;
+  country: string;
+  language: string;
+  memberSince: string;
+  profilePhoto: string;
+  
+  businessName: string;
+  businessCategory: string;
+  gstNumber: string;
+  upiId: string;
+  businessAddress: string;
+  website: string;
+  businessLogo: string;
+  
+  verifiedEmail: boolean;
+  verifiedPhone: boolean;
+  googleConnected: boolean;
+  lastLogin: string;
+  activeDevice: string;
+}

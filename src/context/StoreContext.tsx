@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport } from '../types';
+import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile } from '../types';
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 
@@ -42,7 +42,6 @@ interface StoreContextType extends AppState {
   deleteEmailHistoryLog: (id: string) => void;
   addGeneratedReport: (report: Omit<GeneratedReport, 'id'>) => void;
   deleteGeneratedReport: (id: string) => void;
-  updateGeneratedReportStatus: (id: string, status: string) => void;
   addGullakEntry: (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateGullakEntry: (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteGullakEntry: (id: string) => void;
@@ -56,6 +55,10 @@ interface StoreContextType extends AppState {
   isLoading: boolean;
   newlyUnlocked: UnlockedAchievement | null;
   clearNewlyUnlocked: () => void;
+  updateUserProfile: (profile: Partial<UserProfile>) => void;
+  isAdminAuthenticated: boolean;
+  adminLogin: (email: string, pass: string) => boolean;
+  adminLogout: () => void;
 }
 
 const defaultState: AppState = {
@@ -96,7 +99,33 @@ const defaultState: AppState = {
   },
   aiRecognitionHistory: [],
   posterTemplates: [],
-  unlockedAchievements: []
+  unlockedAchievements: [],
+  userProfile: {
+    fullName: 'Rahul Sharma',
+    username: 'rahul_smartledger',
+    email: 'rahul.sharma@fintech.io',
+    mobile: '+91 98765 43210',
+    dob: '1992-06-15',
+    address: '42, Connaught Place',
+    city: 'New Delhi',
+    state: 'Delhi',
+    country: 'India',
+    language: 'English (IN)',
+    memberSince: '2024-01-10',
+    profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    businessName: 'Sharma Digital Enterprises',
+    businessCategory: 'Fintech & Retail',
+    gstNumber: '07AABCS1429B1Z8',
+    upiId: 'sharmadigital@okaxis',
+    businessAddress: '108, Cyber City, Phase 2',
+    website: 'https://sharmadigital.io',
+    businessLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+    verifiedEmail: true,
+    verifiedPhone: true,
+    googleConnected: true,
+    lastLogin: 'Today, 10:42 AM',
+    activeDevice: 'Chrome on macOS (Secure Session)'
+  }
 };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -106,6 +135,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
+
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
+    return sessionStorage.getItem('smartledger-admin-auth') === 'true';
+  });
+
+  const adminLogin = (email: string, pass: string) => {
+    if (email && pass) {
+      setIsAdminAuthenticated(true);
+      sessionStorage.setItem('smartledger-admin-auth', 'true');
+      return true;
+    }
+    return false;
+  };
+
+  const adminLogout = () => {
+    setIsAdminAuthenticated(false);
+    sessionStorage.removeItem('smartledger-admin-auth');
+  };
 
   const clearNewlyUnlocked = () => setNewlyUnlocked(null);
 
@@ -121,6 +168,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setState({ 
             ...defaultState, 
             ...decryptedData, 
+            userProfile: { ...defaultState.userProfile, ...(decryptedData.userProfile || {}) },
             securitySettings: { ...defaultState.securitySettings, ...decryptedData.securitySettings }, 
             emailSettings: { ...defaultState.emailSettings, ...decryptedData.emailSettings },
             generalSettings: { ...defaultState.generalSettings, ...decryptedData.generalSettings },
@@ -132,6 +180,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             setState({ 
               ...defaultState, 
               ...parsed, 
+              userProfile: { ...defaultState.userProfile, ...(parsed.userProfile || {}) },
               securitySettings: { ...defaultState.securitySettings, ...parsed.securitySettings }, 
               emailSettings: { ...defaultState.emailSettings, ...parsed.emailSettings },
               generalSettings: { ...defaultState.generalSettings, ...parsed.generalSettings },
@@ -292,13 +341,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({
       ...prev,
       generatedReports: [newReport, ...(prev.generatedReports || [])]
-    }));
-  };
-
-  const updateGeneratedReportStatus = (id: string, status: string) => {
-    setState(prev => ({
-      ...prev,
-      generatedReports: (prev.generatedReports || []).map(r => r.id === id ? { ...r, status } : r)
     }));
   };
 
@@ -466,6 +508,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const updateUserProfile = (profile: Partial<UserProfile>) => {
+    setState(prev => ({
+      ...prev,
+      userProfile: { ...(prev.userProfile || defaultState.userProfile!), ...profile }
+    }));
+  };
+
   const resetData = () => {
     setState(defaultState);
   };
@@ -500,6 +549,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       advanceReminderDate,
       updateSecuritySettings,
       updateEmailSettings,
+      updateReportSettings,
       updateGeneralSettings,
       updateAiRecognitionSettings,
       addAiRecognitionHistory,
@@ -511,11 +561,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteEmailHistoryLog,
       addGeneratedReport,
       deleteGeneratedReport,
-      updateGeneratedReportStatus,
       addGullakEntry,
       updateGullakEntry,
       deleteGullakEntry,
       updateGullakSettings,
+      updateUserProfile,
       resetData,
       importData,
       currentBalance,
@@ -524,7 +574,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalPending,
       isLoading,
       newlyUnlocked,
-      clearNewlyUnlocked
+      clearNewlyUnlocked,
+      isAdminAuthenticated,
+      adminLogin,
+      adminLogout
     }}>
       {children}
     </StoreContext.Provider>

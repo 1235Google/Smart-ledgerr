@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileSpreadsheet, FileText, Send, X, Download, BarChart3, Users, TrendingUp } from 'lucide-react';
+import { FileSpreadsheet, FileText, Send, X, Download, BarChart3, Users, TrendingUp, BrainCircuit } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;

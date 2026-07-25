@@ -49,7 +49,11 @@ export default function Goals() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to load goal suggestions');
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 429 || (errorData.error && errorData.error.includes('429'))) {
+           throw new Error('AI rate limit exceeded (429). Please try again in a few moments.');
+        }
+        throw new Error(errorData.error || 'Failed to load goal suggestions');
       }
 
       const data = await res.json();
@@ -83,7 +87,11 @@ export default function Goals() {
       });
 
       if (!res.ok) {
-        throw new Error('Failed to plan goal');
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 429 || (errorData.error && errorData.error.includes('429'))) {
+           throw new Error('AI rate limit exceeded (429). Please try again in a few moments.');
+        }
+        throw new Error(errorData.error || 'Failed to plan goal');
       }
 
       const data = await res.json();

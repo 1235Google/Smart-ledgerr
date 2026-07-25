@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, Link } from 'react-router-dom';
 import { LayoutDashboard, Wallet, Download, Clock, BarChart3, Settings, Search, Menu, X, Bell, User, Target, PiggyBank, Calculator as CalculatorIcon, Crown, Users, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -17,6 +17,7 @@ const navItems = [
   { icon: CalculatorIcon, label: 'Calculator', path: '/calculator' },
   { icon: Clock, label: 'Timeline Replay', path: '/timeline' },
   { icon: FileText, label: 'Monthly Reports', path: '/reports' },
+  { icon: User, label: 'Profile', path: '/profile' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
@@ -107,9 +108,9 @@ export default function Layout() {
               <Bell size={22} />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-[#05060a]"></span>
             </button>
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20 ml-1">
+            <Link to="/profile" className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20 ml-1 hover:bg-white/20 transition-colors">
               <User size={16} className="text-slate-300" />
-            </div>
+            </Link>
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@ import SendMoney from './pages/SendMoney';
 import Analytics from './pages/Analytics';
 import Search from './pages/Search';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 import MonthlyReports from './pages/MonthlyReports';
 import Vault from './pages/Vault';
 import Goals from './pages/Goals';
@@ -19,6 +20,16 @@ import ImportExport from './pages/ImportExport';
 import Calculator from './pages/Calculator';
 import TimelineReplay from './pages/TimelineReplay';
 import SecurityWrapper from './components/SecurityWrapper';
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminLedger from './pages/admin/AdminLedger';
+import AdminPending from './pages/admin/AdminPending';
+import AdminReminders from './pages/admin/AdminReminders';
+import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminReports from './pages/admin/AdminReports';
+import AdminSettings from './pages/admin/AdminSettings';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isSetupComplete, isLoading } = useStore();
@@ -57,6 +68,18 @@ function SetupRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/admin" element={<AdminLogin />} />
+      <Route path="/admin/*" element={<AdminLayout />}>
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="ledger" element={<AdminLedger />} />
+        <Route path="received" element={<MoneyReceived />} />
+        <Route path="pending" element={<AdminPending />} />
+        <Route path="reminders" element={<AdminReminders />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="settings" element={<AdminSettings />} />
+      </Route>
       <Route path="/setup" element={
         <SetupRoute>
           <InitialSetup />
@@ -82,6 +105,7 @@ function AppRoutes() {
         <Route path="import-export" element={<ImportExport />} />
         <Route path="reports" element={<MonthlyReports />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>
   );

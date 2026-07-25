@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import ExcelJS from "exceljs";
 import { saveAs } from 'file-saver';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { Transaction, ReceivedMoney, SentMoney, PendingMoney, GullakEntry, UnlockedAchievement } from '../types';
@@ -9,6 +9,7 @@ export const exportGullakExcel = async (
   unlockedAchievements: UnlockedAchievement[], 
   settings: any
 ) => {
+  try {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Gullak Savings');
 
@@ -102,6 +103,10 @@ export const exportGullakExcel = async (
 
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(new Blob([buffer]), `Gullak_Savings_With_Achievements_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  } catch (error) {
+    console.error("Failed to export Gullak Excel:", error);
+    throw error;
+  }
 };
 
 export const exportGullakCSV = (entries: GullakEntry[], unlockedAchievements: UnlockedAchievement[], settings: any) => {
@@ -162,6 +167,7 @@ export const generateAdvancedExcel = async (
     totalPending: number;
   }
 ) => {
+  try {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'SmartLedger';
   wb.lastModifiedBy = 'SmartLedger';
@@ -440,4 +446,8 @@ export const generateAdvancedExcel = async (
   const buffer = await wb.xlsx.writeBuffer();
   const dateStr = format(new Date(), 'yyyy-MM-dd');
   saveAs(new Blob([buffer]), `SmartLedger_Report_${dateStr}.xlsx`);
+  } catch (error) {
+    console.error("Failed to generate advanced Excel:", error);
+    throw error;
+  }
 };

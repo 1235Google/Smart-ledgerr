@@ -185,7 +185,7 @@ export default function Chatbot() {
                 </div>
                 <div>
                   <h3 className="font-bold text-white">AI Assistant</h3>
-                  <p className="text-xs text-indigo-400">Powered by Gemini</p>
+                  <p className="text-xs text-indigo-400">Powered by xAI Grok</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

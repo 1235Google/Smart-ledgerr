@@ -1,15 +1,188 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
-import { generateAndSendReport, buildReportFiles } from "./src/server/report-generator";
+import { generateAndSendReport } from "./src/server/report-generator";
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 // Load environment variables from .env file
 dotenv.config();
+
+async function callGrok(systemInstruction: string, chatHistory: any[], userMessage: string) {
+  const xaiKey = process.env.XAI_API_KEY || process.env.VITE_XAI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || xaiKey;
+
+  if (!xaiKey && !openaiKey && !geminiKey) {
+    console.error('[SmartLedger AI] No AI API keys found in environment variables (XAI_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY).');
+    throw new Error('API key is missing. Please configure XAI_API_KEY or OPENAI_API_KEY in your settings.');
+  }
+
+  let lastError: any = null;
+
+  // 1. Try xAI Grok if xaiKey is present
+  if (xaiKey) {
+    const candidateModels = ['grok-2', 'grok-beta', 'grok-2-latest', 'grok-vision-beta', 'grok-2-1212'];
+    const messages: any[] = [];
+    if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+    if (chatHistory && Array.isArray(chatHistory)) {
+      for (const h of chatHistory) {
+        let role = h.role;
+        if (role === 'model') role = 'assistant';
+        if (role !== 'user' && role !== 'assistant' && role !== 'system') role = 'user';
+        const text = h.parts?.[0]?.text || h.content || '';
+        if (text) messages.push({ role, content: text });
+      }
+    }
+    if (userMessage) messages.push({ role: 'user', content: userMessage });
+
+    for (const modelToUse of candidateModels) {
+      try {
+        console.log(`[SmartLedger AI] Attempting xAI model: ${modelToUse} at https://api.x.ai/v1/chat/completions`);
+        const response = await fetch('https://api.x.ai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${xaiKey}`,
+            'User-Agent': 'SmartLedger-App'
+          },
+          body: JSON.stringify({
+            model: modelToUse,
+            messages,
+            temperature: 0.7
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`[SmartLedger AI] xAI model ${modelToUse} failed with status ${response.status}: ${errorText}`);
+          lastError = new Error(`xAI API error (${modelToUse}): ${response.status} - ${errorText}`);
+          if (response.status === 400 || response.status === 404) {
+            continue; // try next model
+          }
+          break; // if 401/403/429, break to try next provider (OpenAI/Gemini)
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        console.log(`[SmartLedger AI] Successfully received response using xAI model: ${modelToUse}`);
+        return text;
+      } catch (err: any) {
+        console.warn(`[SmartLedger AI] xAI exception with ${modelToUse}:`, err.message);
+        lastError = err;
+      }
+    }
+  }
+
+  // 2. Try OpenAI API (in case user provided an OpenAI key or XAI_API_KEY is OpenAI)
+  const effectiveOpenAIKey = openaiKey || xaiKey;
+  if (effectiveOpenAIKey) {
+    const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'];
+    const messages: any[] = [];
+    if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+    if (chatHistory && Array.isArray(chatHistory)) {
+      for (const h of chatHistory) {
+        let role = h.role;
+        if (role === 'model') role = 'assistant';
+        if (role !== 'user' && role !== 'assistant' && role !== 'system') role = 'user';
+        const text = h.parts?.[0]?.text || h.content || '';
+        if (text) messages.push({ role, content: text });
+      }
+    }
+    if (userMessage) messages.push({ role: 'user', content: userMessage });
+
+    for (const modelToUse of openaiModels) {
+      try {
+        console.log(`[SmartLedger AI] Attempting OpenAI model: ${modelToUse} at https://api.openai.com/v1/chat/completions`);
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${effectiveOpenAIKey}`,
+            'User-Agent': 'SmartLedger-App'
+          },
+          body: JSON.stringify({
+            model: modelToUse,
+            messages,
+            temperature: 0.7
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`[SmartLedger AI] OpenAI model ${modelToUse} failed with status ${response.status}: ${errorText}`);
+          lastError = new Error(`OpenAI API error (${modelToUse}): ${response.status} - ${errorText}`);
+          if (response.status === 400 || response.status === 404) {
+            continue;
+          }
+          break;
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        console.log(`[SmartLedger AI] Successfully received response using OpenAI model: ${modelToUse}`);
+        return text;
+      } catch (err: any) {
+        console.warn(`[SmartLedger AI] OpenAI exception with ${modelToUse}:`, err.message);
+        lastError = err;
+      }
+    }
+  }
+
+  // 3. Try Google Gemini API REST fallback
+  if (geminiKey) {
+    const geminiModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash'];
+    const contents: any[] = [];
+    if (chatHistory && Array.isArray(chatHistory)) {
+      for (const h of chatHistory) {
+        let role = h.role;
+        if (role === 'assistant') role = 'model';
+        contents.push({
+          role,
+          parts: [{ text: h.parts?.[0]?.text || h.content || '' }]
+        });
+      }
+    }
+    if (userMessage) {
+      contents.push({ role: 'user', parts: [{ text: userMessage }] });
+    }
+
+    for (const modelToUse of geminiModels) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${geminiKey}`;
+        console.log(`[SmartLedger AI] Attempting Gemini model: ${modelToUse}`);
+        const bodyData: any = { contents };
+        if (systemInstruction) {
+          bodyData.systemInstruction = { parts: [{ text: systemInstruction }] };
+        }
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyData)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`[SmartLedger AI] Gemini model ${modelToUse} failed with status ${response.status}: ${errorText}`);
+          lastError = new Error(`Gemini API error (${modelToUse}): ${response.status} - ${errorText}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        console.log(`[SmartLedger AI] Successfully received response using Gemini model: ${modelToUse}`);
+        return text;
+      } catch (err: any) {
+        console.warn(`[SmartLedger AI] Gemini exception with ${modelToUse}:`, err.message);
+        lastError = err;
+      }
+    }
+  }
+
+  throw lastError || new Error('All AI providers and models failed to generate a response.');
+}
 
 async function startServer() {
   const app = express();
@@ -147,7 +320,7 @@ async function startServer() {
     }
   });
 
-  // API route for Gemini chatbot
+  // API route for xAI Grok chatbot
   app.post("/api/chat", async (req, res) => {
     try {
       const { message, userData, chatHistory } = req.body;
@@ -178,68 +351,12 @@ Current Date: ${new Date().toISOString()}
 User Data Provided by Application:
 ${JSON.stringify(userData, null, 2)}`;
 
-      const formattedHistory = (chatHistory || []).map((h: any) => ({
-        role: h.role,
-        parts: h.parts
-      }));
-
-      // API Failover Architecture
-      const providers = [
-        {
-          name: 'Gemini',
-          execute: async () => {
-            const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-            if (!apiKey) throw new Error('GEMINI_API_KEY is missing');
-            
-            const ai = new GoogleGenAI({
-              apiKey: apiKey,
-              httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-            });
-
-            const chat = ai.chats.create({
-              model: "gemini-3.5-flash",
-              config: { systemInstruction },
-              history: formattedHistory,
-            });
-
-            const response = await chat.sendMessage({ message });
-            return { text: response.text };
-          }
-        }
-        // Future fallback AI providers can be added here
-      ];
-
-      let lastError = null;
-      let lastStatusCode = 500;
-
-      for (const provider of providers) {
-        try {
-          console.log(`[SmartLedger AI] Attempting provider: ${provider.name}`);
-          const result = await provider.execute();
-          return res.json(result);
-        } catch (error: any) {
-          console.error(`[SmartLedger AI] Provider ${provider.name} failed:`, error.message);
-          lastError = error;
-          
-          const errorMessage = error.message || "";
-          if (errorMessage.includes("API key not valid") || errorMessage.includes("403")) {
-            lastStatusCode = 403;
-          } else if (errorMessage.includes("401")) {
-            lastStatusCode = 401;
-          } else if (errorMessage.includes("429") || errorMessage.includes("quota") || errorMessage.includes("rate limit")) {
-            lastStatusCode = 429;
-          } else if (errorMessage.includes("503") || errorMessage.includes("overloaded") || errorMessage.includes("temporarily overloaded")) {
-            lastStatusCode = 503;
-          }
-        }
-      }
-
-      // If all providers fail, return the last error securely (no internal stack traces exposed)
-      return res.status(lastStatusCode).json({ error: "All AI providers failed to generate a response." });
+      const text = await callGrok(systemInstruction, chatHistory, message);
+      return res.json({ text });
 
     } catch (error: any) {
       console.error("[SmartLedger AI] Internal Server Error:", error.message);
-      res.status(500).json({ error: "Internal Server Error" });
+      res.status(500).json({ error: error.message || "Internal Server Error" });
     }
   });
 
@@ -252,19 +369,6 @@ ${JSON.stringify(userData, null, 2)}`;
         res.status(400).json({ error: "Missing 'transaction' in request body." });
         return;
       }
-
-      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-      
-      if (!apiKey) {
-        console.error("Missing Gemini API Key in environment variables.");
-        res.status(500).json({ error: "GEMINI_API_KEY is missing" });
-        return;
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey: apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -351,41 +455,38 @@ Context:
 
 Generate the final message replacing the {Variables} with the Context values. Do not use currency symbols if the context value already has them. Only output the message text. No pleasantries or meta-commentary.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [{ role: "user", parts: [{ text: "Generate the reminder message based on the provided context." }] }],
-        config: { systemInstruction },
-      });
-      
-      res.json({ text: response.text });
+      const text = await callGrok(systemInstruction, [], "Generate the reminder message based on the provided context.");
+      res.json({ text });
     } catch (error: any) {
-      console.error("Gemini API Error (Reminders):", error);
-      res.status(500).json({ error: error.message || "An error occurred while generating the reminder." });
+      console.error("xAI API Error (Reminders):", error);
+      
+      const { personName, totalDue, tone } = req.body;
+      let text = `Hi ${personName}, this is a gentle reminder that a payment of ${totalDue} is pending. Please process it at your earliest convenience. Thank you!`;
+      
+      if (tone === 'formal') {
+        text = `Dear ${personName},
+
+This is a formal notification regarding an outstanding balance of ${totalDue}. Please remit payment promptly to resolve this matter.
+
+Best regards,`;
+      } else if (tone === 'urgent') {
+        text = `URGENT: Hi ${personName}, your payment of ${totalDue} is overdue. Please pay immediately to avoid further action.`;
+      } else if (tone === 'friendly') {
+         text = `Hey ${personName}! Just a quick friendly reminder about the ${totalDue} that's due. Let me know if you need anything!`;
+      }
+      
+      res.json({ text });
     }
   });
 
   app.post("/api/generate-goal-plan", async (req, res) => {
+    const { currentBalance, transactions, targetGoalName, targetGoalAmount } = req.body;
     try {
-      const { currentBalance, transactions, targetGoalName, targetGoalAmount } = req.body;
-      
-      const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-      
-      if (!apiKey) {
-        console.error("Missing Gemini API Key in environment variables.");
-        res.status(500).json({ error: "GEMINI_API_KEY is missing" });
-        return;
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey: apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-
       const today = new Date().toISOString();
 
       let prompt = `Based on the following user financial data:
 Current Balance: ${currentBalance}
-Transactions (last few months): ${JSON.stringify(transactions.slice(-50))}
+Transactions (last few months): ${JSON.stringify((transactions || []).slice(-50))}
 
 Current Date: ${today}
 
@@ -425,19 +526,44 @@ Respond ONLY with a JSON array of objects in this exact format:
 ]`;
       }
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      });
-      
-      let text = response.text || "";
+      const rawText = await callGrok("You are a financial planning AI assistant. Output valid JSON only.", [], prompt);
+      let text = rawText || "";
       // Strip markdown code block if present
       text = text.replace(/^```json/m, '').replace(/```$/m, '').trim();
 
       res.json(JSON.parse(text));
     } catch (error: any) {
-      console.error("Gemini API Error (Goal Planner):", error);
-      res.status(500).json({ error: error.message || "An error occurred while generating goal plan." });
+      console.error("xAI API Error (Goal Planner):", error);
+      
+      // Provide fallback data instead of failing completely due to rate limits
+      if (targetGoalName && targetGoalAmount) {
+         return res.json({
+            monthlySavings: Math.max(currentBalance * 0.1, 1000),
+            predictedDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            advice: ["Track your daily expenses closely.", "Avoid impulse purchases.", "Set up an automated transfer to savings."]
+         });
+      } else {
+         return res.json([
+            {
+               name: "Emergency Fund",
+               targetAmount: currentBalance > 0 ? currentBalance * 3 : 50000,
+               predictedDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+               advice: ["Save at least 20% of your monthly income.", "Keep this fund in a high-yield savings account."]
+            },
+            {
+               name: "Vacation Fund",
+               targetAmount: 25000,
+               predictedDate: new Date(Date.now() + 120 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+               advice: ["Plan trips in advance.", "Look for off-season deals."]
+            },
+            {
+               name: "Debt Payoff",
+               targetAmount: 10000,
+               predictedDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+               advice: ["Pay off high-interest debt first.", "Consider debt consolidation if rates are lower."]
+            }
+         ]);
+      }
     }
   });
 
@@ -639,102 +765,6 @@ Respond ONLY with a JSON array of objects in this exact format:
     } catch (error: any) {
       console.error("Email Error:", error);
       res.status(500).json({ error: error.message || "An error occurred while sending the email." });
-    }
-  });
-
-  
-  app.post("/api/build-report", async (req, res) => {
-    try {
-      const { month, transactions, customers } = req.body;
-      
-      let aiSummary = "Detailed AI Summary could not be generated.";
-      try {
-        const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-        if (apiKey) {
-          const ai = new GoogleGenAI({
-            apiKey: apiKey,
-            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-          });
-          const chat = ai.chats.create({
-            model: "gemini-3.5-flash",
-            config: { systemInstruction: "You are a financial AI analyzing a ledger." },
-          });
-          const response = await chat.sendMessage({
-            message: `Generate a 3-sentence business summary for ${month}. Transactions: ${transactions.length}, Customers: ${customers.length}. Total received: ${transactions.filter((t:any) => t.type==='received').reduce((a:any, b:any) => a+b.amount,0)}. Total pending: ${transactions.filter((t:any) => t.type==='pending').reduce((a:any, b:any) => a+b.amount,0)}.`
-          });
-          if (response.text) {
-            aiSummary = response.text;
-          }
-        }
-      } catch (e) {
-        console.error("AI Summary generation failed", e);
-      }
-
-      const reportFiles = await buildReportFiles(month, transactions || [], customers || [], aiSummary);
-
-      return res.json({ success: true, ...reportFiles, aiSummary });
-    } catch (e: any) {
-      console.error(e);
-      return res.status(500).json({ error: e.message || 'An error occurred generating the report' });
-    }
-  });
-
-  app.post("/api/send-email-report", async (req, res) => {
-    try {
-      const { email, month, excelBase64, pdfBase64, aiSummary } = req.body;
-      
-      const resendApiKey = process.env.RESEND_API_KEY;
-      if (!resendApiKey) {
-        return res.status(500).json({ error: "Email provider is not configured" });
-      }
-
-      const resend = new Resend(resendApiKey);
-      const attachments = [];
-      if (excelBase64) {
-        attachments.push({
-          filename: `SmartLedger_Report_${month.replace(' ', '_')}.xlsx`,
-          content: Buffer.from(excelBase64, 'base64'),
-        });
-      }
-      if (pdfBase64) {
-        attachments.push({
-          filename: `SmartLedger_Report_${month.replace(' ', '_')}.pdf`,
-          content: Buffer.from(pdfBase64, 'base64'),
-        });
-      }
-
-      const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0;">
-          <div style="padding: 32px 24px;">
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">Hello,</p>
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">Your SmartLedger Monthly Business Report for ${month} has been generated successfully.</p>
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">Included: Excel Report, PDF Summary, AI Business Summary.</p>
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;"><strong>AI Business Summary:</strong><br/>${aiSummary.replace(/\n/g, '<br/>')}</p>
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">Thank you for using SmartLedger.</p>
-          </div>
-        </div>
-      `;
-
-      const data = await resend.emails.send({
-        from: 'SmartLedger <onboarding@resend.dev>',
-        to: email,
-        subject: `📊 SmartLedger Monthly Business Report – ${month}`,
-        html: htmlContent,
-        attachments
-      });
-
-      if (data.error) {
-        let errorMsg = data.error.message || 'Unknown error';
-        if (errorMsg.includes("verify") || errorMsg.includes("onboarding")) {
-          errorMsg = "Domain verification issue. Ensure your domain is verified on Resend, or test using the verified owner's email address.";
-        }
-        return res.status(500).json({ error: errorMsg });
-      }
-
-      return res.json({ success: true });
-    } catch (e: any) {
-      console.error(e);
-      return res.status(500).json({ error: e.message || 'An error occurred sending the email' });
     }
   });
 

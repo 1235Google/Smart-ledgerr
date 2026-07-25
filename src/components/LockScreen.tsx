@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Fingerprint, ScanFace, XCircle, Delete, Eye, EyeOff, ShieldCheck } from 'lucide-react';
@@ -24,6 +24,13 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const [lockoutTime, setLockoutTime] = useState(0);
 
   const pinLength = securitySettings.pin?.length || 4;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (securitySettings.pinEnabled && !showBiometric) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [securitySettings.pinEnabled, showBiometric]);
 
   useEffect(() => {
     let timer: any;
@@ -132,6 +139,27 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       const newVal = pinInput + digit;
       setPinInput(newVal);
       setError(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (lockoutTime > 0) return;
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (val.length <= pinLength) {
+      setPinInput(val);
+      setError(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (lockoutTime > 0) return;
+    if (e.key === 'Enter') {
+      if (pinInput.length === pinLength) {
+        handleUnlockClick();
+      }
+    } else if (e.key === 'Delete') {
+      setPinInput('');
     }
   };
 
@@ -162,6 +190,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     if (lockoutTime > 0) return;
     setPinInput(prev => prev.slice(0, -1));
     setError(false);
+    inputRef.current?.focus();
   };
 
   const handleGoogleLoginFallback = () => {
@@ -244,27 +273,53 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         </p>
         
         {securitySettings.pinEnabled && (
-          <div className="w-full mb-8 relative">
+          <div className="w-full mb-8 relative" onClick={() => inputRef.current?.focus()}>
+            <input
+              ref={inputRef}
+              type="text"
+              inputMode="none"
+              value={pinInput}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              className="opacity-0 absolute inset-0 w-full h-full z-10 cursor-pointer text-transparent caret-transparent"
+              aria-label="Enter PIN"
+              autoComplete="off"
+              maxLength={pinLength}
+            />
             <div className="flex justify-center gap-3">
               {Array.from({ length: pinLength }).map((_, i) => (
                 <div 
                   key={i}
                   className={cn(
-                    "w-12 h-14 rounded-xl border flex items-center justify-center text-2xl font-bold transition-all duration-300",
+                    "w-12 h-14 rounded-xl border flex items-center justify-center text-2xl font-bold transition-all duration-300 relative overflow-hidden",
                     i < pinInput.length 
                       ? "bg-white/10 border-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.2)]" 
                       : "bg-black/20 border-white/10 text-transparent",
+                    i === pinInput.length && !error && "border-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.5)] bg-white/5",
                     error && "border-red-500 bg-red-500/10 text-red-500"
                   )}
                 >
-                  {i < pinInput.length ? (showPin ? pinInput[i] : '•') : ''}
+                  <AnimatePresence mode="popLayout">
+                    {i < pinInput.length && (
+                      <motion.span
+                        key={`pin-${i}`}
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.5, opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute inset-0 flex items-center justify-center"
+                      >
+                        {showPin ? pinInput[i] : '•'}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </div>
               ))}
             </div>
             {pinInput.length > 0 && (
               <button 
-                onClick={() => setShowPin(!showPin)} 
-                className="absolute right-0 top-1/2 -translate-y-1/2 -mr-10 text-slate-400 hover:text-white transition-colors"
+                onClick={(e) => { e.stopPropagation(); setShowPin(!showPin); inputRef.current?.focus(); }} 
+                className="absolute right-0 top-1/2 -translate-y-1/2 -mr-10 text-slate-400 hover:text-white transition-colors z-20"
               >
                 {showPin ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>

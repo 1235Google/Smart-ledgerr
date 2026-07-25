@@ -15,8 +15,8 @@ export default function AdminReports() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const currentCompanyName = userProfile?.businessName?.trim() || userProfile?.name?.trim() || 'SmartLedgerX Enterprise';
-  const adminName = userProfile?.name || 'Administrator';
+  const currentCompanyName = userProfile?.businessName?.trim() || userProfile?.fullName?.trim() || 'SmartLedgerX Enterprise';
+  const adminName = userProfile?.fullName || 'Administrator';
 
   const pendingList = transactions.filter(t => t.type === 'pending' && t.status === 'pending');
   const paymentHistoryList = transactions.filter(t => t.type === 'received');

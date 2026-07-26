@@ -12,11 +12,8 @@ const navItems = [
   { icon: Clock, label: 'Pending Payments', path: '/pending' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: Search, label: 'Search', path: '/search' },
-  { icon: Target, label: 'Goal Planner', path: '/goals' },
   { icon: PiggyBank, label: 'Gullak Savings', path: '/gullak' },
   { icon: CalculatorIcon, label: 'Calculator', path: '/calculator' },
-  { icon: Clock, label: 'Timeline Replay', path: '/timeline' },
-  { icon: FileText, label: 'Monthly Reports', path: '/reports' },
   { icon: User, label: 'Profile', path: '/profile' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];

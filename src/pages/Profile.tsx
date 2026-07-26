@@ -6,14 +6,14 @@ import {
   Calendar, ShieldCheck, Smartphone, Edit3, Share2, Download, 
   Camera, CheckCircle2, ChevronRight, Activity, Clock, Award, Wallet, 
   ArrowUpRight, ArrowDownLeft, Sparkles, TrendingUp, Lock, Eye, QrCode,
-  FileText, Shield, Zap, RefreshCw, AlertCircle, Check, Star, Heart, MessageSquare, X
+  FileText, Shield, Zap, RefreshCw, AlertCircle, Check, Star, Heart, MessageSquare, X, Target
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Profile() {
   const { userProfile, customers, transactions, updateUserProfile } = useStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'business' | 'security' | 'documents' | 'customizer' | 'ai'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ai'>('overview');
   const [aiQuery, setAiQuery] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -68,6 +68,14 @@ export default function Profile() {
     activeDevice: 'Chrome on macOS (Secure Session)'
   };
 
+  // Money Goal State
+  const [goalAmount, setGoalAmount] = useState<number>(() => {
+    const saved = localStorage.getItem('smartledger_money_goal');
+    return saved ? Math.max(1000, Number(saved)) : 1000000;
+  });
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [tempGoalInput, setTempGoalInput] = useState(goalAmount.toString());
+
   // Financial calculations
   const totalCustomers = customers ? customers.length : 24;
   const activeCustomers = customers ? customers.filter(c => (c as any).status === 'active').length : 19;
@@ -79,6 +87,26 @@ export default function Profile() {
   const largestTransaction = 75000;
   const fastestPayment = '12 Minutes';
   const currentStreak = 30;
+
+  // Auto-calculated current savings from SmartLedger balance (Net = Received - Pending)
+  const currentSavings = Math.max(0, totalReceived - totalPending);
+  const remainingAmount = Math.max(0, goalAmount - currentSavings);
+  const progressPercentage = goalAmount > 0 
+    ? Math.min(100, Math.round((currentSavings / goalAmount) * 100)) 
+    : 0;
+
+  const handleSaveGoal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const parsed = parseFloat(tempGoalInput.replace(/[^0-9.]/g, ''));
+    if (isNaN(parsed) || parsed <= 0) {
+      showToast("Please enter a valid goal amount!");
+      return;
+    }
+    setGoalAmount(parsed);
+    localStorage.setItem('smartledger_money_goal', String(parsed));
+    setIsEditingGoal(false);
+    showToast(`Money goal updated to ₹${parsed.toLocaleString('en-IN')}!`);
+  };
 
   const financialTrendData = [
     { month: 'Jan', income: 95000, pending: 20000 },
@@ -144,7 +172,7 @@ export default function Profile() {
   };
 
   return (
-    <div className={cn("min-h-screen text-white pb-24 overflow-x-hidden transition-colors duration-300", amoledMode ? "bg-[#000000]" : "bg-[#070709]")}>
+    <div className={cn("min-h-screen text-white pb-24 overflow-x-hidden transition-colors duration-300", amoledMode ? "bg-[#000000]" : "bg-[#05060a]")}>
       
       {/* Toast Notification Banner */}
       <AnimatePresence>
@@ -153,679 +181,454 @@ export default function Profile() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-400/30 backdrop-blur-xl"
+            className="fixed top-6 right-6 z-50 bg-emerald-600/90 text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-400/30 backdrop-blur-xl font-medium text-sm"
           >
             <CheckCircle2 size={20} className="text-white" />
-            <span className="font-semibold text-sm">{toastMessage}</span>
+            <span>{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Background Glows */}
+      {/* Ambient Background Lights */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] bg-indigo-600/15 rounded-full blur-[140px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[45%] h-[45%] bg-purple-600/15 rounded-full blur-[140px]" />
+        <div className="absolute top-[-5%] left-1/2 -translate-x-1/2 w-[600px] h-[350px] bg-indigo-600/10 rounded-full blur-[150px]" />
+        <div className="absolute top-[20%] right-[-10%] w-[450px] h-[450px] bg-purple-600/10 rounded-full blur-[160px]" />
+        <div className="absolute bottom-[10%] left-[-10%] w-[400px] h-[400px] bg-emerald-600/10 rounded-full blur-[140px]" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 pt-8 space-y-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 pt-6 md:pt-10 space-y-8">
         
-        {/* HERO PROFILE SECTION */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{ backdropFilter: `blur(${glassIntensity}px)` }}
-          className="relative rounded-3xl bg-white/[0.03] border border-white/10 p-8 md:p-10 shadow-2xl overflow-hidden group"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-emerald-500/10 opacity-50" />
-          
-          <div className="relative flex flex-col lg:flex-row items-center justify-between gap-8">
-            <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+        {/* CENTERPIECE: DIGITAL IDENTITY CARD (ULTRA-LUXURY ATM/CREDIT CARD AESTHETIC) */}
+        <div className="flex justify-center w-full">
+          <motion.div 
+            initial={{ opacity: 0, y: 20, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="relative w-full max-w-xl group"
+          >
+            {/* Ambient Backlight Glow */}
+            <div className="absolute -inset-1.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500 rounded-[30px] blur-2xl opacity-40 group-hover:opacity-70 transition duration-700 animate-pulse" />
+
+            {/* The Ultra-Luxury Credit/ATM Card */}
+            <div 
+              style={{ backdropFilter: `blur(${glassIntensity}px)` }}
+              className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-900/95 via-indigo-950/85 to-black/95 border border-white/20 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] p-6 sm:p-8 transition-all duration-500 group-hover:border-indigo-400/50 group-hover:shadow-[0_25px_70px_-10px_rgba(99,102,241,0.3)]"
+            >
               
-              {/* Profile Image with Glowing Particles & Neon Hover */}
-              <div className="relative group/avatar cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Click to update profile picture">
-                <div className="absolute -inset-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500 rounded-full blur-xl opacity-70 group-hover/avatar:opacity-100 transition duration-500 animate-pulse" />
-                
-                <div className="relative w-36 h-36 rounded-full overflow-hidden border-4 border-[#0a0a0a] bg-neutral-900 shadow-2xl">
-                  {safeProfile.profilePhoto ? (
-                    <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover transition duration-500 group-hover/avatar:scale-110" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-neutral-500"><User size={56} /></div>
-                  )}
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition">
-                    <Camera size={32} className="text-white" />
+              {/* Metallic Gloss/Sheen Overlay */}
+              <div className="absolute -top-32 -left-32 w-96 h-96 bg-gradient-to-br from-white/10 via-white/5 to-transparent rotate-45 pointer-events-none group-hover:translate-x-16 transition-transform duration-1000" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/15 via-purple-500/10 to-transparent pointer-events-none" />
+
+              {/* Card Header: Brand Logo, Contactless Wave & Diamond Tier Badge */}
+              <div className="flex items-center justify-between mb-6 relative z-10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 via-indigo-500 to-purple-600 p-[1px] shadow-lg">
+                    <div className="w-full h-full bg-slate-950 rounded-[11px] flex items-center justify-center">
+                      <Sparkles size={16} className="text-amber-400 fill-amber-400" />
+                    </div>
                   </div>
+                  <span className="font-extrabold tracking-widest text-xs text-white uppercase font-mono">
+                    SMARTLEDGER<span className="text-indigo-400">CARD</span>
+                  </span>
                 </div>
-                <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
 
-                {/* Online Status Badge */}
-                <div className="absolute bottom-2 right-2 w-5 h-5 bg-emerald-500 rounded-full border-4 border-[#0a0a0a] z-20 animate-pulse" title="Online & Active" />
-                
-                {/* Golden Verified Badge */}
-                <div className="absolute top-0 right-2 w-8 h-8 bg-amber-500 rounded-full border-4 border-[#0a0a0a] flex items-center justify-center z-20 shadow-lg" title="Golden Verified">
-                  <BadgeCheck size={16} className="text-white" />
-                </div>
-              </div>
+                <div className="flex items-center gap-3">
+                  {/* Contactless Signal Symbol */}
+                  <div className="text-white/40 group-hover:text-white/80 transition-colors" title="Contactless Enabled">
+                    <svg className="w-6 h-6 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18.5a6.5 6.5 0 0 0 0-13M15.5 16a3.5 3.5 0 0 0 0-7M8.5 21a10 10 0 0 0 0-18" />
+                    </svg>
+                  </div>
 
-              <div>
-                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mb-2">
-                  <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white">{safeProfile.fullName}</h1>
-                  <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold uppercase tracking-wider shadow-sm">
+                  <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.25)]">
                     Diamond Tier
                   </span>
                 </div>
-                <p className="text-neutral-400 text-sm mb-4 font-medium flex items-center justify-center md:justify-start gap-2">
-                  <span>{safeProfile.username}</span> • <span className="text-indigo-400">{safeProfile.businessName}</span>
-                </p>
+              </div>
 
-                {/* XP & Level Progress */}
-                <div className="w-full max-w-md bg-black/40 border border-white/10 rounded-2xl p-3 backdrop-blur-md">
-                  <div className="flex items-center justify-between text-xs font-semibold text-neutral-300 mb-1.5">
-                    <span className="flex items-center gap-1.5"><Sparkles size={14} className="text-amber-400" /> Level 8 Enterprise Trader</span>
-                    <span className="text-emerald-400">8,450 / 10,000 XP</span>
+              {/* Center Body: Profile Avatar, Details, Level & XP */}
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10 mb-6">
+                
+                {/* Profile Picture with Golden Metallic Ring & Upload Click */}
+                <div 
+                  className="relative group/avatar cursor-pointer shrink-0" 
+                  onClick={() => fileInputRef.current?.click()} 
+                  title="Click to update profile photo"
+                >
+                  <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-400 via-indigo-500 to-purple-500 rounded-full blur-sm opacity-80 group-hover/avatar:opacity-100 transition duration-300" />
+                  
+                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-amber-400/80 bg-slate-900 shadow-2xl">
+                    {safeProfile.profilePhoto ? (
+                      <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover transition duration-500 group-hover/avatar:scale-105" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-500"><User size={40} /></div>
+                    )}
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition duration-200">
+                      <Camera size={24} className="text-white" />
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 rounded-full w-[84%]" />
+                  <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
+
+                  {/* Golden Verification Badge */}
+                  <div className="absolute top-0 right-0 w-7 h-7 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full border-2 border-slate-950 flex items-center justify-center z-20 shadow-lg" title="Golden Verified Member">
+                    <BadgeCheck size={14} className="text-slate-950 stroke-[3]" />
+                  </div>
+
+                  {/* Active Online Indicator */}
+                  <div className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-slate-950 z-20 animate-pulse" title="Online" />
+                </div>
+
+                {/* Info Column */}
+                <div className="flex-1 text-center sm:text-left min-w-0 w-full">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-md truncate mb-1">
+                    {safeProfile.fullName}
+                  </h1>
+                  
+                  <p className="text-slate-300 text-xs sm:text-sm font-medium mb-3 flex items-center justify-center sm:justify-start gap-2 truncate">
+                    <span className="text-indigo-300 font-mono font-semibold">{safeProfile.username}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-emerald-400 truncate">{safeProfile.businessName}</span>
+                  </p>
+
+                  {/* Level & XP Progress */}
+                  <div className="bg-slate-950/70 border border-white/10 rounded-xl p-2.5 backdrop-blur-md">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1.5">
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <Sparkles size={12} className="text-amber-400 fill-amber-400" />
+                        Level 8 Enterprise Trader
+                      </span>
+                      <span className="text-emerald-400 font-mono">8,450 / 10,000 XP</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-amber-400 via-indigo-500 to-emerald-400 rounded-full w-[84.5%]" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Profile Strength & Trust Score Widget */}
-            <div className="flex items-center gap-6 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-              <div className="relative w-20 h-20 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="40" cy="40" r="34" stroke="currentColor" strokeWidth="6" className="text-white/10 fill-none" />
-                  <circle cx="40" cy="40" r="34" stroke="currentColor" strokeWidth="6" className="text-emerald-400 fill-none stroke-dasharray [stroke-dasharray:213] [stroke-dashoffset:17]" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                  <span className="text-lg font-bold text-white">92%</span>
-                  <span className="text-[10px] text-neutral-400 uppercase tracking-widest">Strength</span>
-                </div>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={18} className="text-emerald-400" />
-                  <span className="text-sm font-bold text-white">Trust Score: 98/100</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star size={18} className="text-amber-400" />
-                  <span className="text-sm font-semibold text-neutral-300">Reputation: Elite</span>
-                </div>
-                <div className="text-xs text-neutral-400">All security audits passed</div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
 
-        {/* NAVIGATION TABS */}
-        <div className="flex flex-wrap items-center gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit backdrop-blur-xl">
+              {/* Card Footer: EMV Chip + Member ID + Member Since + Trust Score */}
+              <div className="pt-4 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left relative z-10 items-center">
+                
+                {/* EMV Gold Chip */}
+                <div className="flex items-center justify-center sm:justify-start gap-2">
+                  <div className="w-10 h-7 rounded-md bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-600 p-[1px] shadow-inner relative overflow-hidden flex items-center justify-center">
+                    <div className="w-full h-full border border-amber-600/40 rounded-[5px] grid grid-cols-2 gap-0.5 p-0.5">
+                      <div className="bg-amber-300/40 rounded-[2px]" />
+                      <div className="bg-amber-300/40 rounded-[2px]" />
+                      <div className="bg-amber-300/40 rounded-[2px]" />
+                      <div className="bg-amber-300/40 rounded-[2px]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SmartLedger Member ID */}
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Member ID</div>
+                  <div className="font-mono font-bold text-white text-xs sm:text-sm tracking-wider">
+                    SLX-8942-8819
+                  </div>
+                </div>
+
+                {/* Member Since Date */}
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Member Since</div>
+                  <div className="font-mono font-bold text-slate-200 text-xs sm:text-sm">
+                    {safeProfile.memberSince}
+                  </div>
+                </div>
+
+                {/* Trust Score */}
+                <div className="text-center sm:text-right">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Trust Score</div>
+                  <div className="inline-flex items-center gap-1 font-bold text-emerald-400 text-xs sm:text-sm">
+                    <ShieldCheck size={14} className="text-emerald-400" />
+                    <span>98/100</span>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </motion.div>
+        </div>
+
+        {/* SIX PREMIUM GLASS CARDS IN RESPONSIVE 3x2 GRID (3 Cols Desktop, 2 Cols Tablet, 1 Col Mobile) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
           {[
-            { id: 'overview', label: 'Overview & Stats', icon: Activity },
-            { id: 'business', label: 'Business Identity', icon: Building2 },
-            { id: 'security', label: 'Security & Trust', icon: Shield },
-            { id: 'documents', label: 'Verified Documents', icon: FileText },
-            { id: 'customizer', label: 'Theme Customizer', icon: Edit3 },
-            { id: 'ai', label: 'SmartLedger AI', icon: Sparkles },
-          ].map((tab) => {
-            const Icon = tab.icon;
+            { title: 'Total Received', value: `₹${totalReceived.toLocaleString()}`, change: '+18.4%', icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+            { title: 'Total Pending', value: `₹${totalPending.toLocaleString()}`, change: '-4.2%', icon: ArrowUpRight, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+            { title: 'Active Customers', value: `${activeCustomers} / ${totalCustomers}`, change: '84% Active', icon: User, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
+            { title: 'Collection Rate', value: `${collectionRate}%`, change: 'Optimal', icon: TrendingUp, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+            { title: 'Recovery Rate', value: `${recoveryRate}%`, change: 'High Trust', icon: ShieldCheck, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+            { title: 'Avg Monthly Income', value: `₹${avgMonthlyIncome.toLocaleString()}`, change: '+8.1%', icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+          ].map((card, idx) => {
+            const Icon = card.icon;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={cn(
-                  "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer",
-                  activeTab === tab.id ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/20" : "text-neutral-400 hover:text-white hover:bg-white/5"
-                )}
+              <motion.div 
+                key={idx} 
+                whileHover={{ scale: 1.02, y: -2 }}
+                transition={{ duration: 0.2 }}
+                className="relative overflow-hidden bg-white/[0.03] border border-white/10 hover:border-indigo-500/40 rounded-2xl p-5 backdrop-blur-xl transition-all shadow-xl flex flex-col justify-between group"
               >
-                <Icon size={16} />
-                <span>{tab.label}</span>
-              </button>
+                <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
+                
+                <div className="flex items-center justify-between mb-3 relative z-10">
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center border backdrop-blur-md", card.bg, card.color)}>
+                    <Icon size={20} />
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/5 text-slate-300 border border-white/10 font-mono">
+                    {card.change}
+                  </span>
+                </div>
+                
+                <div className="relative z-10">
+                  <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-1 font-mono">
+                    {card.value}
+                  </div>
+                  <div className="text-xs font-semibold text-slate-400 tracking-wide">
+                    {card.title}
+                  </div>
+                </div>
+              </motion.div>
             );
           })}
         </div>
 
-        {/* TAB 1: OVERVIEW & STATS */}
-        {activeTab === 'overview' && (
-          <div className="space-y-8">
+        {/* MONEY GOAL CARD (PREMIUM GLASSMORPHISM SAVINGS TRACKER) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative overflow-hidden bg-white/[0.03] border border-white/10 hover:border-emerald-500/30 rounded-3xl p-6 md:p-8 backdrop-blur-xl shadow-2xl transition-all duration-300 group"
+        >
+          {/* Subtle Background Glows */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/15 transition-colors" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Card Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 relative z-10 border-b border-white/10 pb-5">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 via-teal-500/20 to-indigo-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]">
+                <Target size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Money Goal</h2>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold uppercase tracking-wider font-mono">
+                    Auto-Tracked
+                  </span>
+                </div>
+                <p className="text-slate-400 text-xs sm:text-sm">Current savings synced live from SmartLedger balance</p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setTempGoalInput(goalAmount.toString());
+                setIsEditingGoal(true);
+              }}
+              className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/15 hover:border-emerald-500/40 text-white rounded-xl text-xs font-semibold transition-all shadow-md flex items-center gap-2 cursor-pointer w-max shrink-0"
+            >
+              <Edit3 size={15} className="text-emerald-400" />
+              <span>Edit Goal</span>
+            </button>
+          </div>
+
+          {/* Main Content Layout: Progress Gauge + Metric Cards */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center relative z-10 mb-6">
             
-            {/* 10 PREMIUM STATISTICS CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              {[
-                { title: 'Total Customers', value: totalCustomers, change: '+12%', icon: User, color: 'text-indigo-400' },
-                { title: 'Active Customers', value: activeCustomers, change: '84% Active', icon: Activity, color: 'text-emerald-400' },
-                { title: 'Total Received', value: `₹${totalReceived.toLocaleString()}`, change: '+18.4%', icon: ArrowDownLeft, color: 'text-emerald-400' },
-                { title: 'Total Pending', value: `₹${totalPending.toLocaleString()}`, change: '-4.2%', icon: ArrowUpRight, color: 'text-amber-400' },
-                { title: 'Collection Rate', value: `${collectionRate}%`, change: 'Optimal', icon: TrendingUp, color: 'text-blue-400' },
-                { title: 'Recovery Rate', value: `${recoveryRate}%`, change: 'High Trust', icon: ShieldCheck, color: 'text-purple-400' },
-                { title: 'Avg Monthly Income', value: `₹${avgMonthlyIncome.toLocaleString()}`, change: '+8.1%', icon: Wallet, color: 'text-emerald-400' },
-                { title: 'Largest Transaction', value: `₹${largestTransaction.toLocaleString()}`, change: 'Record', icon: Star, color: 'text-amber-400' },
-                { title: 'Fastest Payment', value: fastestPayment, change: 'Instant', icon: Zap, color: 'text-blue-400' },
-                { title: 'Current Streak', value: `${currentStreak} Days`, change: 'Unbroken', icon: Award, color: 'text-orange-400' },
-              ].map((card, idx) => {
-                const Icon = card.icon;
-                return (
-                  <motion.div 
-                    key={idx}
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    className="bg-white/5 border border-white/10 hover:border-emerald-500/40 rounded-2xl p-5 backdrop-blur-xl transition-all shadow-lg flex flex-col justify-between group"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className={cn("w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center", card.color)}>
-                        <Icon size={20} />
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 text-neutral-300 border border-white/10">
-                        {card.change}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-white tracking-tight mb-1">{card.value}</div>
-                      <div className="text-xs text-neutral-400 font-medium">{card.title}</div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* FINANCIAL INSIGHTS & CHARTS */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Income vs Pending Trend</h2>
-                    <p className="text-neutral-400 text-sm">Monthly financial performance analysis</p>
-                  </div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">Live Analytics</span>
-                </div>
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={financialTrendData}>
-                      <defs>
-                        <linearGradient id="colorInc" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="month" stroke="#737373" />
-                      <YAxis stroke="#737373" tickFormatter={(v) => `₹${v/1000}k`} />
-                      <Tooltip contentStyle={{ backgroundColor: '#121212', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '1rem', color: '#fff' }} />
-                      <Area type="monotone" dataKey="income" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorInc)" name="Income" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* AI SMART INSIGHTS CARD */}
-              <div className="bg-gradient-to-br from-indigo-950/40 via-purple-950/30 to-black/60 border border-indigo-500/30 rounded-3xl p-6 md:p-8 backdrop-blur-xl flex flex-col justify-between shadow-2xl relative overflow-hidden">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-                
-                <div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-                      <Sparkles size={24} />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">SmartLedger Gemini AI Insights</h2>
-                      <p className="text-indigo-300 text-sm">Personalized automated financial observations</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex items-start gap-3">
-                      <Zap size={18} className="text-emerald-400 mt-0.5 shrink-0" />
-                      <p className="text-sm text-neutral-200">Your pending collection increased by <span className="text-emerald-400 font-bold">12%</span> this month. Recommended sending bulk WhatsApp reminders.</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex items-start gap-3">
-                      <Clock size={18} className="text-indigo-400 mt-0.5 shrink-0" />
-                      <p className="text-sm text-neutral-200">You usually receive payments faster on <span className="text-indigo-400 font-bold">Mondays</span> (avg 18 mins settlement).</p>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex items-start gap-3">
-                      <Star size={18} className="text-amber-400 mt-0.5 shrink-0" />
-                      <p className="text-sm text-neutral-200">Your highest paying customer is <span className="text-amber-400 font-bold">Rahul Traders</span> with ₹1.2L annual contribution.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 mt-6 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-xs text-neutral-400">Model: Gemini 2.5 Flash Autonomous Engine</span>
-                  <button 
-                    onClick={() => showToast("AI Model re-analyzed weights successfully. All insights up to date.")} 
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-lg cursor-pointer"
-                  >
-                    Re-Analyze Now
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* ACHIEVEMENT SYSTEM */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Achievement Trophies</h2>
-                  <p className="text-neutral-400 text-sm">Milestones unlocked across your business journey (Click to inspect)</p>
-                </div>
-                <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold">4 / 5 Unlocked</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                {achievementsList.map((ach) => {
-                  const Icon = ach.icon;
-                  return (
-                    <motion.div 
-                      key={ach.id} 
-                      whileHover={{ scale: 1.03 }}
-                      onClick={() => setSelectedAchievement(ach)}
-                      className={cn(
-                        "p-5 rounded-2xl border flex flex-col justify-between transition-all cursor-pointer",
-                        ach.unlocked ? "bg-black/40 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)] hover:border-amber-400" : "bg-black/20 border-white/5 opacity-60 hover:opacity-90"
-                      )}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", ach.unlocked ? "bg-amber-500/20 text-amber-400" : "bg-white/5 text-neutral-500")}>
-                            <Icon size={20} />
-                          </div>
-                          {ach.unlocked && <CheckCircle2 size={16} className="text-emerald-400" />}
-                        </div>
-                        <h3 className="font-bold text-white text-base mb-1">{ach.title}</h3>
-                        <p className="text-xs text-neutral-400 mb-4">{ach.desc}</p>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className={cn("text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md", ach.unlocked ? "bg-amber-500/10 text-amber-400" : "bg-white/5 text-neutral-500")}>
-                          {ach.unlocked ? 'Unlocked' : 'Locked'}
-                        </span>
-                        <span className="text-[10px] text-neutral-400 font-mono">{ach.date}</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* TIMELINE SECTION */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-              <h2 className="text-xl font-bold text-white mb-6">Account Activity Timeline</h2>
-              <div className="space-y-6 relative before:absolute before:inset-0 before:left-5 before:w-0.5 before:bg-white/10">
-                {timelineEvents.map((ev, idx) => (
-                  <motion.div 
-                    key={idx} 
-                    whileHover={{ x: 4 }}
-                    className="flex items-start gap-4 relative group cursor-pointer"
-                    onClick={() => showToast(`Timeline event selected: ${ev.title}`)}
-                  >
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 z-10 shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                      <Clock size={18} />
-                    </div>
-                    <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex-1 group-hover:border-emerald-500/30 transition-colors">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-white text-base">{ev.title}</h3>
-                        <span className="text-xs font-mono text-neutral-400">{ev.date}</span>
-                      </div>
-                      <p className="text-xs text-neutral-400">{ev.desc}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* TAB 2: BUSINESS IDENTITY & SMART SCORE */}
-        {activeTab === 'business' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
-              {/* Digital Business Card */}
-              <div className="lg:col-span-2 bg-gradient-to-br from-neutral-900 via-neutral-950 to-black border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                
-                <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-white/10 border border-white/20">
-                      <img src={safeProfile.businessLogo} alt="Logo" className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">{safeProfile.businessName}</h2>
-                      <p className="text-emerald-400 text-sm font-medium">{safeProfile.businessCategory}</p>
-                    </div>
-                  </div>
-                  <div 
-                    onClick={() => {
-                      navigator.clipboard.writeText(safeProfile.upiId);
-                      showToast(`UPI ID "${safeProfile.upiId}" copied to clipboard!`);
+            {/* Left Circular Gauge */}
+            <div className="lg:col-span-4 flex flex-col items-center justify-center bg-black/40 border border-white/5 rounded-2xl p-6 text-center">
+              <div className="relative w-36 h-36 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle 
+                    cx="50" 
+                    cy="50" 
+                    r="40" 
+                    stroke="currentColor" 
+                    strokeWidth="8" 
+                    className="text-white/10 fill-none" 
+                  />
+                  <circle 
+                    cx="50" 
+                    cy="50" 
+                    r="40" 
+                    stroke="currentColor" 
+                    strokeWidth="8" 
+                    strokeLinecap="round"
+                    className="text-emerald-400 fill-none transition-all duration-1000 ease-out" 
+                    style={{
+                      strokeDasharray: 251.32,
+                      strokeDashoffset: 251.32 - (251.32 * progressPercentage) / 100
                     }}
-                    className="w-16 h-16 bg-white p-2 rounded-2xl flex items-center justify-center shadow-lg cursor-pointer hover:scale-105 transition-transform"
-                    title="Click to copy UPI ID"
-                  >
-                    <QrCode size={48} className="text-black" />
-                  </div>
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-extrabold text-white font-mono tracking-tight">{progressPercentage}%</span>
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mt-0.5">
+                    {progressPercentage >= 100 ? 'Achieved!' : 'Reached'}
+                  </span>
                 </div>
+              </div>
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">GST Number</div>
-                    <div className="font-mono font-bold text-white text-base">{safeProfile.gstNumber}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">UPI ID</div>
-                    <div className="font-mono font-bold text-white text-base">{safeProfile.upiId}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Annual Revenue</div>
-                    <div className="font-bold text-emerald-400 text-lg">{(safeProfile as any).annualRevenue}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Business Rating</div>
-                    <div className="flex items-center gap-1 text-amber-400 font-bold">
-                      <Star size={16} fill="currentColor" /> <span>{(safeProfile as any).businessRating} / 5.0</span>
-                    </div>
-                  </div>
+            {/* Right Metrics Grid */}
+            <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Metric 1: Goal Amount */}
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Goal Amount</div>
+                <div className="text-xl sm:text-2xl font-extrabold text-white font-mono truncate">
+                  ₹{goalAmount.toLocaleString('en-IN')}
                 </div>
-
-                <div className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="text-xs text-neutral-400 flex items-center gap-2">
-                    <MapPin size={14} /> {safeProfile.businessAddress}
-                  </div>
-                  <a 
-                    href={safeProfile.website} 
-                    target="_blank" 
-                    rel="noreferrer" 
-                    onClick={() => showToast("Opening official website portal...")}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Globe size={14} /> Visit Website
-                  </a>
+                <div className="text-[11px] text-indigo-400 font-medium mt-2 flex items-center gap-1">
+                  <Sparkles size={12} /> Target Limit
                 </div>
               </div>
 
-              {/* Smart Ledger Score Widget */}
-              <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl flex flex-col justify-between text-center">
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Smart Ledger Score</h3>
-                  <p className="text-xs text-neutral-400 mb-6">Calculated via AI financial health algorithm</p>
-
-                  <div className="relative w-36 h-36 mx-auto flex items-center justify-center mb-6">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle cx="72" cy="72" r="62" stroke="currentColor" strokeWidth="8" className="text-white/10 fill-none" />
-                      <circle cx="72" cy="72" r="62" stroke="currentColor" strokeWidth="8" className="text-emerald-400 fill-none stroke-dasharray [stroke-dasharray:390] [stroke-dashoffset:50]" strokeLinecap="round" />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-4xl font-extrabold text-white">892</span>
-                      <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Exceptional</span>
-                    </div>
-                  </div>
+              {/* Metric 2: Current Savings */}
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Current Savings</div>
+                <div className="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono truncate">
+                  ₹{currentSavings.toLocaleString('en-IN')}
                 </div>
-
-                <div className="space-y-2 text-left bg-black/40 p-4 rounded-2xl border border-white/5">
-                  <div className="flex justify-between text-xs"><span className="text-neutral-400">Collection Speed</span><span className="text-emerald-400 font-bold">96%</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-neutral-400">Customer Trust</span><span className="text-emerald-400 font-bold">98%</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-neutral-400">Payment Recovery</span><span className="text-emerald-400 font-bold">94%</span></div>
+                <div className="text-[11px] text-emerald-400/80 font-medium mt-2 flex items-center gap-1">
+                  <CheckCircle2 size={12} /> SmartLedger Sync
                 </div>
               </div>
 
+              {/* Metric 3: Remaining Amount */}
+              <div className="bg-black/40 border border-white/10 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-1">Remaining</div>
+                <div className={cn("text-xl sm:text-2xl font-extrabold font-mono truncate", remainingAmount === 0 ? "text-emerald-400" : "text-amber-400")}>
+                  ₹{remainingAmount.toLocaleString('en-IN')}
+                </div>
+                <div className="text-[11px] text-amber-400/80 font-medium mt-2 flex items-center gap-1">
+                  <Clock size={12} /> To Collect
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Animated Progress Bar Footer */}
+          <div className="space-y-2 relative z-10">
+            <div className="flex justify-between items-center text-xs font-semibold">
+              <span className="text-slate-400">Goal Progress</span>
+              <span className="text-emerald-400 font-mono font-bold">₹{currentSavings.toLocaleString('en-IN')} / ₹{goalAmount.toLocaleString('en-IN')} ({progressPercentage}%)</span>
+            </div>
+            <div className="w-full h-3 bg-black/50 rounded-full overflow-hidden p-0.5 border border-white/10">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercentage}%` }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500 rounded-full shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+              />
             </div>
           </div>
-        )}
+        </motion.div>
 
-        {/* TAB 3: SECURITY & TRUST CENTER */}
-        {activeTab === 'security' && (
-          <div className="space-y-8">
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8 border-b border-white/10 pb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <ShieldCheck size={32} />
+      </div>
+
+      {/* EDIT MONEY GOAL MODAL */}
+      <AnimatePresence>
+        {isEditingGoal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              className="bg-[#121212] border border-white/15 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 relative overflow-hidden"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                    <Target size={20} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white">Security Health Score: 100 / 100</h2>
-                    <p className="text-neutral-400 text-sm">All enterprise grade authentications and protocols are fully active.</p>
+                    <h3 className="text-xl font-bold text-white">Edit Money Goal</h3>
+                    <p className="text-xs text-slate-400">Set your financial target amount</p>
                   </div>
-                </div>
-                <span className="px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold text-sm">
-                  Fully Secure
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[
-                  { title: 'Google Authentication', status: safeProfile.googleConnected, desc: 'OAuth 2.0 Connected securely', toggleable: false },
-                  { title: 'Email Verification', status: safeProfile.verifiedEmail, desc: safeProfile.email, toggleable: false },
-                  { title: 'Phone Verification', status: safeProfile.verifiedPhone, desc: safeProfile.mobile, toggleable: false },
-                  { title: 'Biometric Unlock', status: biometricActive, desc: 'TouchID / Windows Hello active', toggleable: true, setter: setBiometricActive },
-                  { title: 'Two Factor Auth (2FA)', status: twoFactorActive, desc: 'Authenticator App enforced', toggleable: true, setter: setTwoFactorActive },
-                  { title: 'Face Unlock', status: faceUnlockActive, desc: 'Instant spatial sensor match', toggleable: true, setter: setFaceUnlockActive },
-                ].map((sec, idx) => (
-                  <div key={idx} className="p-5 rounded-2xl bg-black/40 border border-white/5 flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-white text-base mb-1">{sec.title}</h3>
-                      <p className="text-xs text-neutral-400">{sec.desc}</p>
-                    </div>
-                    {sec.toggleable ? (
-                      <button 
-                        onClick={() => {
-                          sec.setter(!sec.status);
-                          showToast(`${sec.title} status updated.`);
-                        }}
-                        className={cn("px-3 py-1.5 rounded-xl text-xs font-bold uppercase transition-colors cursor-pointer", sec.status ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30" : "bg-neutral-800 text-neutral-400 border border-white/10 hover:bg-neutral-700")}
-                      >
-                        {sec.status ? 'Active' : 'Disabled'}
-                      </button>
-                    ) : (
-                      <span className="px-3 py-1.5 rounded-full text-xs font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        Verified
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
-              <h2 className="text-xl font-bold text-white mb-4">Active Session & Login History</h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-black/40 border border-white/5">
-                  <div className="flex items-center gap-4">
-                    <Smartphone size={24} className="text-emerald-400" />
-                    <div>
-                      <div className="font-bold text-white text-sm">{safeProfile.activeDevice}</div>
-                      <div className="text-xs text-neutral-400">{safeProfile.lastLogin}</div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => showToast("Terminated all other active remote sessions successfully.")}
-                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold transition cursor-pointer"
-                  >
-                    Terminate Other Sessions
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: VERIFIED DOCUMENTS */}
-        {activeTab === 'documents' && (
-          <div className="space-y-8">
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-1">Corporate & Regulatory Documents</h2>
-                  <p className="text-neutral-400 text-sm">Securely uploaded and verified documents for financial compliance.</p>
                 </div>
                 <button 
-                  onClick={() => showToast("Document upload wizard initiated...")}
-                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg cursor-pointer"
+                  onClick={() => setIsEditingGoal(false)} 
+                  className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/5 cursor-pointer transition"
                 >
-                  + Upload New Document
+                  <X size={20} />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {documentsList.map((doc) => (
-                  <div key={doc.id} className="p-6 rounded-2xl bg-black/40 border border-white/10 flex flex-col justify-between space-y-4 hover:border-emerald-500/30 transition-all">
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <FileText size={24} className="text-emerald-400" />
-                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold">{doc.status}</span>
-                      </div>
-                      <h3 className="font-bold text-white text-base mb-1">{doc.name}</h3>
-                      <p className="text-xs text-neutral-400">Uploaded on {doc.date} • {doc.type}</p>
-                    </div>
-                    <button 
-                      onClick={() => setSelectedDoc(doc)} 
-                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-semibold text-white flex items-center justify-center gap-2 transition cursor-pointer"
-                    >
-                      <Download size={14} /> View / Download PDF
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: THEME CUSTOMIZER */}
-        {activeTab === 'customizer' && (
-          <div className="space-y-8 max-w-3xl mx-auto">
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white">Theme & Appearance Customizer</h2>
-                <p className="text-neutral-400 text-sm">Personalize your SmartLedgerX workspace styling and interface dynamics.</p>
-              </div>
-
-              <div className="space-y-6">
+              <form onSubmit={handleSaveGoal} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Accent Color Theme</label>
-                  <div className="flex gap-4">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                    Goal Amount (₹)
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-4 text-xl font-extrabold text-emerald-400 font-mono">₹</span>
+                    <input 
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={tempGoalInput}
+                      onChange={(e) => setTempGoalInput(e.target.value)}
+                      placeholder="e.g. 1000000"
+                      className="w-full bg-black/60 border border-white/15 rounded-2xl pl-10 pr-4 py-3.5 text-white font-mono text-xl font-bold focus:outline-none focus:border-emerald-500 transition shadow-inner"
+                      autoFocus
+                    />
+                  </div>
+                  {tempGoalInput && !isNaN(Number(tempGoalInput.replace(/[^0-9.]/g, ''))) && Number(tempGoalInput.replace(/[^0-9.]/g, '')) > 0 && (
+                    <div className="mt-2 text-xs font-mono text-emerald-400 flex items-center justify-between px-1">
+                      <span className="text-slate-400 font-sans">Formatted Target:</span>
+                      <span className="font-bold">₹{Number(tempGoalInput.replace(/[^0-9.]/g, '')).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-2">
+                    Quick Presets:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
                     {[
-                      { name: 'emerald', class: 'bg-emerald-500' },
-                      { name: 'indigo', class: 'bg-indigo-500' },
-                      { name: 'purple', class: 'bg-purple-500' },
-                      { name: 'blue', class: 'bg-blue-500' },
-                      { name: 'amber', class: 'bg-amber-500' }
-                    ].map((col) => (
-                      <button 
-                        key={col.name} 
-                        onClick={() => {
-                          setAccentColor(col.name);
-                          showToast(`Accent theme updated to ${col.name}!`);
-                        }} 
-                        className={cn("w-10 h-10 rounded-full border-2 transition hover:scale-110 cursor-pointer", col.class, accentColor === col.name ? "border-white ring-4 ring-white/20" : "border-white/20")} 
-                      />
+                      { label: '₹5 Lakhs', val: 500000 },
+                      { label: '₹10 Lakhs', val: 1000000 },
+                      { label: '₹25 Lakhs', val: 2500000 },
+                      { label: '₹50 Lakhs', val: 5000000 },
+                      { label: '₹1 Crore', val: 10000000 },
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setTempGoalInput(preset.val.toString())}
+                        className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40 text-xs font-mono font-medium text-slate-300 hover:text-white transition cursor-pointer"
+                      >
+                        {preset.label}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-white">AMOLED True Black Mode</h3>
-                    <p className="text-xs text-neutral-400">Optimize contrast for OLED screens</p>
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    checked={amoledMode} 
-                    onChange={e => {
-                      setAmoledMode(e.target.checked);
-                      showToast(e.target.checked ? "AMOLED Black Mode enabled." : "Standard dark mode enabled.");
-                    }}
-                    className="w-5 h-5 accent-emerald-500 cursor-pointer" 
-                  />
-                </div>
-
-                <div className="pt-4 border-t border-white/10 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-white">Glassmorphism Intensity</h3>
-                      <p className="text-xs text-neutral-400">Frosted glass backdrop blur effect</p>
-                    </div>
-                    <span className="text-xs font-mono text-emerald-400 font-bold">{glassIntensity}px</span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min={10} 
-                    max={120} 
-                    value={glassIntensity} 
-                    onChange={e => setGlassIntensity(Number(e.target.value))}
-                    className="w-full accent-emerald-500 cursor-pointer" 
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: SMARTLEDGER AI ASSISTANT PANEL */}
-        {activeTab === 'ai' && (
-          <div className="space-y-8 max-w-4xl mx-auto">
-            <div className="bg-gradient-to-br from-indigo-950/50 via-purple-950/40 to-black border border-indigo-500/30 rounded-3xl p-8 backdrop-blur-xl shadow-2xl space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.5)]">
-                  <Sparkles size={28} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">SmartLedger AI Assistant</h2>
-                  <p className="text-indigo-300 text-sm">Ask anything about your cash flow, customer habits, or business forecasts.</p>
-                </div>
-              </div>
-
-              {/* Suggested Prompts */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "Show my highest pending customer.",
-                  "Predict next month's income.",
-                  "Which customer pays fastest?",
-                  "Generate comprehensive business report."
-                ].map((prompt, idx) => (
+                <div className="flex gap-3 pt-2">
                   <button 
-                    key={idx} 
-                    onClick={() => handleAiAsk(prompt)}
-                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-indigo-200 transition cursor-pointer"
+                    type="button"
+                    onClick={() => setIsEditingGoal(false)} 
+                    className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm text-slate-300 transition cursor-pointer"
                   >
-                    "{prompt}"
+                    Cancel
                   </button>
-                ))}
-              </div>
-
-              {/* Chat Input */}
-              <div className="flex gap-3">
-                <input 
-                  type="text" 
-                  value={aiQuery} 
-                  onChange={e => setAiQuery(e.target.value)}
-                  onKeyDown={e => { if(e.key === 'Enter') handleAiAsk(aiQuery); }}
-                  placeholder="Ask SmartLedger AI..." 
-                  className="flex-1 bg-black/50 border border-white/10 rounded-2xl px-5 py-3.5 text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500 text-sm"
-                />
-                <button 
-                  onClick={() => handleAiAsk(aiQuery)}
-                  className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-lg transition flex items-center gap-2 cursor-pointer"
-                >
-                  <Sparkles size={18} /> Ask AI
-                </button>
-              </div>
-
-              {/* AI Response Output */}
-              {isAiThinking && (
-                <div className="p-6 rounded-2xl bg-black/40 border border-indigo-500/20 flex items-center gap-3 text-indigo-300">
-                  <RefreshCw className="animate-spin" size={20} />
-                  <span>Gemini AI is analyzing your enterprise ledger data...</span>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm transition shadow-lg cursor-pointer"
+                  >
+                    Save Goal
+                  </button>
                 </div>
-              )}
-
-              {aiResponse && !isAiThinking && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 rounded-2xl bg-black/60 border border-indigo-500/30 text-white space-y-2">
-                  <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider">
-                    <Sparkles size={14} /> SmartLedger AI Response
-                  </div>
-                  <p className="text-sm leading-relaxed">{aiResponse}</p>
-                </motion.div>
-              )}
-            </div>
+              </form>
+            </motion.div>
           </div>
         )}
-
-      </div>
+      </AnimatePresence>
 
       {/* ACHIEVEMENT DETAILS MODAL */}
       <AnimatePresence>
@@ -836,14 +639,14 @@ export default function Profile() {
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
                   <selectedAchievement.icon size={24} />
                 </div>
-                <button onClick={() => setSelectedAchievement(null)} className="p-2 text-neutral-400 hover:text-white cursor-pointer"><X size={20} /></button>
+                <button onClick={() => setSelectedAchievement(null)} className="p-2 text-slate-400 hover:text-white cursor-pointer"><X size={20} /></button>
               </div>
               <div>
                 <h3 className="text-2xl font-bold text-white mb-1">{selectedAchievement.title}</h3>
-                <p className="text-sm text-neutral-400 mb-4">{selectedAchievement.desc}</p>
+                <p className="text-sm text-slate-400 mb-4">{selectedAchievement.desc}</p>
                 <div className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs">
-                  <div className="flex justify-between"><span className="text-neutral-400">Status</span><span className="text-amber-400 font-bold uppercase">{selectedAchievement.unlocked ? 'Unlocked' : 'Locked'}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-400">Milestone Date</span><span className="text-white font-mono">{selectedAchievement.date}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Status</span><span className="text-amber-400 font-bold uppercase">{selectedAchievement.unlocked ? 'Unlocked' : 'Locked'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Milestone Date</span><span className="text-white font-mono">{selectedAchievement.date}</span></div>
                 </div>
               </div>
               <button onClick={() => setSelectedAchievement(null)} className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl font-semibold text-sm transition cursor-pointer">Close</button>
@@ -862,12 +665,12 @@ export default function Profile() {
                   <FileText className="text-emerald-400" size={24} />
                   <h3 className="text-xl font-bold text-white">{selectedDoc.name}</h3>
                 </div>
-                <button onClick={() => setSelectedDoc(null)} className="p-2 text-neutral-400 hover:text-white cursor-pointer"><X size={20} /></button>
+                <button onClick={() => setSelectedDoc(null)} className="p-2 text-slate-400 hover:text-white cursor-pointer"><X size={20} /></button>
               </div>
               <div className="p-6 rounded-2xl bg-black/50 border border-white/10 text-center space-y-3">
                 <FileText size={48} className="mx-auto text-emerald-400/60" />
-                <div className="text-sm text-neutral-300 font-medium">Verified Compliance Document</div>
-                <div className="text-xs text-neutral-500 font-mono">ID: {selectedDoc.id} • {selectedDoc.date}</div>
+                <div className="text-sm text-slate-300 font-medium">Verified Compliance Document</div>
+                <div className="text-xs text-slate-500 font-mono">ID: {selectedDoc.id} • {selectedDoc.date}</div>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setSelectedDoc(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm cursor-pointer">Cancel</button>

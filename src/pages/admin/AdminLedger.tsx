@@ -31,8 +31,34 @@ export default function AdminLedger() {
     { id: 'tx-5', personName: 'Rohan Mehta', amount: 12000, type: 'received', date: '2026-07-22 10:10 AM', category: 'Retainer', method: 'UPI' },
   ];
 
+  // Filter ONLY completed/received transactions (exclude pending records)
+  const completedEntriesOnly = safeTransactions.filter((tx: any) => {
+    // 1. Exclude any pending payment
+    if (
+      tx.type === 'pending' ||
+      tx.status === 'pending' ||
+      tx.status === 'overdue' ||
+      tx.isPending === true
+    ) {
+      return false;
+    }
+
+    // 2. Only show completed, received, income, sent, or paid transactions
+    const isCompleted =
+      tx.status === 'completed' ||
+      tx.status === 'received' ||
+      tx.status === 'paid' ||
+      tx.type === 'income' ||
+      tx.type === 'received' ||
+      tx.type === 'sent' ||
+      tx.type === 'expense' ||
+      tx.type === 'completed';
+
+    return isCompleted;
+  });
+
   // Filtering
-  const filtered = safeTransactions.filter((tx: any) => {
+  const filtered = completedEntriesOnly.filter((tx: any) => {
     const q = searchQuery.toLowerCase();
     const personName = (tx.personName || '').toLowerCase();
     const category = (tx.category || tx.purpose || tx.reason || tx.type || '').toLowerCase();
@@ -249,7 +275,7 @@ export default function AdminLedger() {
               ) : (
                 <tr>
                   <td colSpan={6} className="text-center py-16 text-neutral-400 font-medium">
-                    No entries found.
+                    No completed entries found.
                   </td>
                 </tr>
               )}

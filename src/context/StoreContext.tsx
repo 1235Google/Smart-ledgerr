@@ -63,6 +63,7 @@ interface StoreContextType extends AppState {
   isAdminAuthenticated: boolean;
   adminLogin: (email: string, pass: string) => boolean;
   adminLogout: () => void;
+  updateAdminPassword: (currentPass: string, newPass: string) => { success: boolean; error?: string };
 }
 
 const defaultState: AppState = {
@@ -216,13 +217,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return sessionStorage.getItem('smartledger-admin-auth') === 'true';
   });
 
+  const getAdminPassHash = () => {
+    return state.securitySettings?.adminPasswordHash || CryptoJS.SHA256('admin123').toString();
+  };
+
   const adminLogin = (email: string, pass: string) => {
-    if (email && pass) {
+    if (!email || !pass) return false;
+    const inputHash = CryptoJS.SHA256(pass).toString();
+    const currentHash = getAdminPassHash();
+    if (inputHash === currentHash) {
       setIsAdminAuthenticated(true);
       sessionStorage.setItem('smartledger-admin-auth', 'true');
       return true;
     }
     return false;
+  };
+
+  const updateAdminPassword = (currentPass: string, newPass: string) => {
+    const inputHash = CryptoJS.SHA256(currentPass).toString();
+    const currentHash = getAdminPassHash();
+    
+    if (inputHash !== currentHash) {
+      return { success: false, error: 'Current password is incorrect.' };
+    }
+
+    const newHash = CryptoJS.SHA256(newPass).toString();
+    setState(prev => ({
+      ...prev,
+      securitySettings: {
+        ...prev.securitySettings,
+        adminPasswordHash: newHash
+      }
+    }));
+
+    return { success: true };
   };
 
   const adminLogout = () => {
@@ -686,7 +714,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       clearNewlyUnlocked,
       isAdminAuthenticated,
       adminLogin,
-      adminLogout
+      adminLogout,
+      updateAdminPassword
     }}>
       {children}
     </StoreContext.Provider>

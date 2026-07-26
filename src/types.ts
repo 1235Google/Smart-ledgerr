@@ -58,6 +58,7 @@ export interface SecuritySettings {
   faceUnlockEnabled: boolean;
   autoLockTime: number; // in minutes
   registeredDevices: RegisteredDevice[];
+  adminPasswordHash?: string;
 }
 
 export interface EmailSettings {

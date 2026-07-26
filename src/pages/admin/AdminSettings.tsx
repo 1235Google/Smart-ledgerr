@@ -1,30 +1,132 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Settings, Lock, Moon, Database, Upload, Download, CheckCircle2 } from 'lucide-react';
+import { Lock, Database, Upload, Download, CheckCircle2, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 export default function AdminSettings() {
-  const { importData } = useStore();
+  const { importData, updateAdminPassword, isAdminAuthenticated } = useStore();
   const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
+
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [passSuccess, setPassSuccess] = useState(false);
 
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState<number | null>(null);
+
+  const currentPassInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  useEffect(() => {
+    currentPassInputRef.current?.focus();
+  }, []);
+
+  const validateNewPassword = (pwd: string, currPwd: string): string | null => {
+    if (pwd.length < 8) {
+      return "Password must be at least 8 characters long.";
+    }
+    if (!/[A-Z]/.test(pwd)) {
+      return "Password must contain at least one uppercase letter.";
+    }
+    if (!/[a-z]/.test(pwd)) {
+      return "Password must contain at least one lowercase letter.";
+    }
+    if (!/[0-9]/.test(pwd)) {
+      return "Password must contain at least one number.";
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) {
+      return "Password must contain at least one special character.";
+    }
+    if (pwd === currPwd) {
+      return "New password cannot be the same as current password.";
+    }
+    return null;
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPass !== confirmPass) {
-      alert("New passwords do not match.");
+    setError(null);
+    setPassSuccess(false);
+
+    if (!isAdminAuthenticated) {
+      setError("Authentication session expired. Please log in again.");
       return;
     }
-    setPassSuccess(true);
+
+    if (lockoutTime && Date.now() < lockoutTime) {
+      const remainingSecs = Math.ceil((lockoutTime - Date.now()) / 1000);
+      setError(`Too many failed attempts. Please wait ${remainingSecs} seconds before trying again.`);
+      return;
+    }
+
+    const cPass = currentPass.trim();
+    const nPass = newPass.trim();
+    const confPass = confirmPass.trim();
+
+    if (!cPass || !nPass || !confPass) {
+      setError("Please fill in all password fields.");
+      return;
+    }
+
+    if (nPass !== confPass) {
+      setError("New passwords do not match.");
+      return;
+    }
+
+    const valError = validateNewPassword(nPass, cPass);
+    if (valError) {
+      setError(valError);
+      return;
+    }
+
+    setIsLoading(true);
+
     setTimeout(() => {
-      setPassSuccess(false);
-      setCurrentPass('');
-      setNewPass('');
-      setConfirmPass('');
-    }, 2000);
+      try {
+        const result = updateAdminPassword(cPass, nPass);
+
+        if (!result.success) {
+          const nextFailed = failedAttempts + 1;
+          setFailedAttempts(nextFailed);
+
+          if (nextFailed >= 5) {
+            const lockUntil = Date.now() + 30000;
+            setLockoutTime(lockUntil);
+            setError("Too many failed attempts. Please wait 30 seconds before trying again.");
+          } else {
+            setError(result.error || "Current password is incorrect.");
+          }
+          setIsLoading(false);
+          return;
+        }
+
+        setFailedAttempts(0);
+        setLockoutTime(null);
+        setPassSuccess(true);
+        setCurrentPass('');
+        setNewPass('');
+        setConfirmPass('');
+        setIsLoading(false);
+
+        setTimeout(() => {
+          setPassSuccess(false);
+        }, 4000);
+
+      } catch (err: any) {
+        setIsLoading(false);
+        if (err.message?.includes('network') || !navigator.onLine) {
+          setError("Network error. Please check your internet connection and try again.");
+        } else {
+          setError("An unexpected error occurred. Please try again.");
+        }
+      }
+    }, 400);
   };
 
   const handleBackupDatabase = () => {
@@ -75,48 +177,149 @@ export default function AdminSettings() {
         </div>
 
         {passSuccess && (
-          <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3">
-            <CheckCircle2 size={18} />
-            <span>Admin password changed successfully!</span>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3"
+          >
+            <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
+            <span className="font-medium">Password updated successfully.</span>
+          </motion.div>
         )}
 
-        <form onSubmit={handlePasswordChange} className="space-y-4">
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3"
+          >
+            <AlertCircle size={18} className="shrink-0 text-red-400" />
+            <span className="font-medium">{error}</span>
+          </motion.div>
+        )}
+
+        <form onSubmit={handlePasswordChange} className="space-y-5">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Current Password</label>
-            <input 
-              type="password" 
-              value={currentPass} 
-              onChange={e => setCurrentPass(e.target.value)}
-              placeholder="••••••••" 
-              required
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-            />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">
+              Current Password
+            </label>
+            <div className="relative">
+              <input 
+                type={showCurrentPass ? "text" : "password"} 
+                value={currentPass} 
+                onChange={e => setCurrentPass(e.target.value)}
+                placeholder="••••••••" 
+                required
+                autoFocus
+                ref={currentPassInputRef}
+                autoComplete="current-password"
+                disabled={isLoading}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-4 pr-11 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPass(!showCurrentPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 transition-colors"
+                title={showCurrentPass ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showCurrentPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
+
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">New Password</label>
-            <input 
-              type="password" 
-              value={newPass} 
-              onChange={e => setNewPass(e.target.value)}
-              placeholder="••••••••" 
-              required
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-            />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">
+              New Password
+            </label>
+            <div className="relative">
+              <input 
+                type={showNewPass ? "text" : "password"} 
+                value={newPass} 
+                onChange={e => setNewPass(e.target.value)}
+                placeholder="••••••••" 
+                required
+                autoComplete="new-password"
+                disabled={isLoading}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-4 pr-11 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPass(!showNewPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 transition-colors"
+                title={showNewPass ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showNewPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            {newPass.length > 0 && (
+              <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs text-neutral-400">
+                <div className={`flex items-center gap-1.5 ${newPass.length >= 8 ? 'text-emerald-400 font-medium' : ''}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${newPass.length >= 8 ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  8+ characters
+                </div>
+                <div className={`flex items-center gap-1.5 ${/[A-Z]/.test(newPass) ? 'text-emerald-400 font-medium' : ''}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(newPass) ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  1 Uppercase
+                </div>
+                <div className={`flex items-center gap-1.5 ${/[a-z]/.test(newPass) ? 'text-emerald-400 font-medium' : ''}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(newPass) ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  1 Lowercase
+                </div>
+                <div className={`flex items-center gap-1.5 ${/[0-9]/.test(newPass) ? 'text-emerald-400 font-medium' : ''}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${/[0-9]/.test(newPass) ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  1 Number
+                </div>
+                <div className={`flex items-center gap-1.5 ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPass) ? 'text-emerald-400 font-medium' : ''}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPass) ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                  1 Special char
+                </div>
+              </div>
+            )}
           </div>
+
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Confirm New Password</label>
-            <input 
-              type="password" 
-              value={confirmPass} 
-              onChange={e => setConfirmPass(e.target.value)}
-              placeholder="••••••••" 
-              required
-              className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-            />
+            <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">
+              Confirm New Password
+            </label>
+            <div className="relative">
+              <input 
+                type={showConfirmPass ? "text" : "password"} 
+                value={confirmPass} 
+                onChange={e => setConfirmPass(e.target.value)}
+                placeholder="••••••••" 
+                required
+                autoComplete="new-password"
+                disabled={isLoading}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-4 pr-11 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPass(!showConfirmPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 transition-colors"
+                title={showConfirmPass ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showConfirmPass ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="py-3 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-colors shadow-lg">
-            Update Password
+
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="py-3 px-6 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:bg-emerald-600/50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Updating Password...</span>
+              </>
+            ) : (
+              <span>Update Password</span>
+            )}
           </button>
         </form>
       </div>
@@ -172,3 +375,4 @@ export default function AdminSettings() {
     </div>
   );
 }
+

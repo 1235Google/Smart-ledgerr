@@ -2,7 +2,7 @@ import React from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion } from 'motion/react';
 import { Wallet, ArrowDownLeft, Clock, Users, ArrowUpRight, Bell, AlertTriangle, ShieldAlert } from 'lucide-react';
-import { formatCurrency, formatDate, cn } from '../lib/utils';
+import { formatCurrency, formatDate, cn, calculateReminderDetails } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { PendingMoney, SentMoney, ReceivedMoney } from '../types';
 
@@ -16,7 +16,9 @@ export default function Dashboard() {
 
   const today = new Date().toISOString().split('T')[0];
   const dueReminders = transactions.filter((t): t is PendingMoney => {
-    return t.type === 'pending' && t.status === 'pending' && t.reminderStatus === 'active' && !!t.nextReminderDate && t.nextReminderDate <= today;
+    if (t.type !== 'pending' || t.status !== 'pending' || t.reminderStatus !== 'active') return false;
+    const details = calculateReminderDetails(t, generalSettings?.timezone);
+    return !details.isStopped && !!details.nextReminderDate && details.nextReminderDate <= today;
   });
 
   // Anomaly Detection

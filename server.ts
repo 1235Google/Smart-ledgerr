@@ -4,7 +4,6 @@ import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
-import { GoogleGenAI } from "@google/genai";
 import { generateAndSendReport } from "./src/server/report-generator";
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
@@ -12,62 +11,18 @@ import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthen
 dotenv.config();
 
 async function callGrok(systemInstruction: string, chatHistory: any[], userMessage: string) {
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   const xaiKey = process.env.XAI_API_KEY || process.env.VITE_XAI_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || xaiKey;
 
-  if (!geminiKey && !xaiKey && !openaiKey) {
-    console.error('[SmartLedger AI] No AI API keys found in environment variables.');
-    throw new Error('API key is missing. Please configure GEMINI_API_KEY.');
+  if (!xaiKey && !openaiKey && !geminiKey) {
+    console.error('[SmartLedger AI] No AI API keys found in environment variables (XAI_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY).');
+    throw new Error('API key is missing. Please configure XAI_API_KEY or OPENAI_API_KEY in your settings.');
   }
 
   let lastError: any = null;
 
-  // 1. Try Google Gemini API using @google/genai SDK first (Primary & Recommended)
-  if (geminiKey) {
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: geminiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
-      const contents: any[] = [];
-      if (chatHistory && Array.isArray(chatHistory)) {
-        for (const h of chatHistory) {
-          let role = h.role;
-          if (role === 'assistant') role = 'model';
-          contents.push({
-            role,
-            parts: [{ text: h.parts?.[0]?.text || h.content || '' }]
-          });
-        }
-      }
-      if (userMessage) {
-        contents.push({ role: 'user', parts: [{ text: userMessage }] });
-      }
-
-      console.log(`[SmartLedger AI] Attempting Gemini SDK model: gemini-3.6-flash`);
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: contents.length > 0 ? contents : userMessage,
-        config: systemInstruction ? { systemInstruction } : undefined
-      });
-
-      if (response.text) {
-        console.log(`[SmartLedger AI] Successfully received response using Gemini model: gemini-3.6-flash`);
-        return response.text;
-      }
-    } catch (err: any) {
-      console.warn(`[SmartLedger AI] Gemini SDK exception:`, err.message);
-      lastError = err;
-    }
-  }
-
-  // 2. Try xAI Grok if xaiKey is present
+  // 1. Try xAI Grok if xaiKey is present
   if (xaiKey) {
     const candidateModels = ['grok-2', 'grok-beta', 'grok-2-latest', 'grok-vision-beta', 'grok-2-1212'];
     const messages: any[] = [];
@@ -107,7 +62,7 @@ async function callGrok(systemInstruction: string, chatHistory: any[], userMessa
           if (response.status === 400 || response.status === 404) {
             continue; // try next model
           }
-          break; // if 401/403/429, break to try next provider
+          break; // if 401/403/429, break to try next provider (OpenAI/Gemini)
         }
 
         const data = await response.json();
@@ -121,8 +76,9 @@ async function callGrok(systemInstruction: string, chatHistory: any[], userMessa
     }
   }
 
-  // 3. Try OpenAI API
-  if (openaiKey) {
+  // 2. Try OpenAI API (in case user provided an OpenAI key or XAI_API_KEY is OpenAI)
+  const effectiveOpenAIKey = openaiKey || xaiKey;
+  if (effectiveOpenAIKey) {
     const openaiModels = ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'];
     const messages: any[] = [];
     if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
@@ -144,7 +100,7 @@ async function callGrok(systemInstruction: string, chatHistory: any[], userMessa
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${openaiKey}`,
+            'Authorization': `Bearer ${effectiveOpenAIKey}`,
             'User-Agent': 'SmartLedger-App'
           },
           body: JSON.stringify({
@@ -170,6 +126,56 @@ async function callGrok(systemInstruction: string, chatHistory: any[], userMessa
         return text;
       } catch (err: any) {
         console.warn(`[SmartLedger AI] OpenAI exception with ${modelToUse}:`, err.message);
+        lastError = err;
+      }
+    }
+  }
+
+  // 3. Try Google Gemini API REST fallback
+  if (geminiKey) {
+    const geminiModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash'];
+    const contents: any[] = [];
+    if (chatHistory && Array.isArray(chatHistory)) {
+      for (const h of chatHistory) {
+        let role = h.role;
+        if (role === 'assistant') role = 'model';
+        contents.push({
+          role,
+          parts: [{ text: h.parts?.[0]?.text || h.content || '' }]
+        });
+      }
+    }
+    if (userMessage) {
+      contents.push({ role: 'user', parts: [{ text: userMessage }] });
+    }
+
+    for (const modelToUse of geminiModels) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${geminiKey}`;
+        console.log(`[SmartLedger AI] Attempting Gemini model: ${modelToUse}`);
+        const bodyData: any = { contents };
+        if (systemInstruction) {
+          bodyData.systemInstruction = { parts: [{ text: systemInstruction }] };
+        }
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyData)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`[SmartLedger AI] Gemini model ${modelToUse} failed with status ${response.status}: ${errorText}`);
+          lastError = new Error(`Gemini API error (${modelToUse}): ${response.status} - ${errorText}`);
+          continue;
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        console.log(`[SmartLedger AI] Successfully received response using Gemini model: ${modelToUse}`);
+        return text;
+      } catch (err: any) {
+        console.warn(`[SmartLedger AI] Gemini exception with ${modelToUse}:`, err.message);
         lastError = err;
       }
     }

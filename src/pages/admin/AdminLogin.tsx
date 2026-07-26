@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
-import { ShieldCheck, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ShieldCheck, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { cn } from '../../lib/utils';
 
 export default function AdminLogin() {
   const { adminLogin, isAdminAuthenticated } = useStore();
@@ -12,196 +11,55 @@ export default function AdminLogin() {
   const [email, setEmail] = useState('admin@smartledgerx.io');
   const [password, setPassword] = useState('admin123');
   const [rememberMe, setRememberMe] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [shakePassword, setShakePassword] = useState(false);
-  const [passwordErrorBorder, setPasswordErrorBorder] = useState(false);
-
-  // Brute force protection state
-  const [failedAttempts, setFailedAttempts] = useState<number>(() => {
-    return parseInt(localStorage.getItem('admin_failed_attempts') || '0', 10);
-  });
-  const [lockoutUntil, setLockoutUntil] = useState<number>(() => {
-    return parseInt(localStorage.getItem('admin_lockout_until') || '0', 10);
-  });
-  const [countdown, setCountdown] = useState<number>(0);
-
-  // Forgot password modal state
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
-  const [forgotError, setForgotError] = useState('');
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  };
 
   // If already authenticated, redirect to dashboard
-  useEffect(() => {
+  React.useEffect(() => {
     if (isAdminAuthenticated) {
       navigate('/admin/dashboard', { replace: true });
     }
   }, [isAdminAuthenticated, navigate]);
 
-  // Handle lockout countdown timer
-  useEffect(() => {
-    const updateCountdown = () => {
-      const now = Date.now();
-      if (lockoutUntil > now) {
-        const remaining = Math.ceil((lockoutUntil - now) / 1000);
-        setCountdown(remaining);
-      } else {
-        setCountdown(0);
-        if (lockoutUntil > 0) {
-          localStorage.removeItem('admin_lockout_until');
-          localStorage.removeItem('admin_failed_attempts');
-          setFailedAttempts(0);
-          setLockoutUntil(0);
-        }
-      }
-    };
-
-    updateCountdown();
-    const timer = setInterval(updateCountdown, 1000);
-    return () => clearInterval(timer);
-  }, [lockoutUntil]);
-
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading || countdown > 0) return;
-
     setError('');
-    setPasswordErrorBorder(false);
-
-    // 1. Empty email check
-    if (!email || !email.trim()) {
-      setError('Please enter your admin email.');
-      showToast('Please enter your admin email.', 'error');
-      return;
-    }
-
-    // 2. Empty password check
-    if (!password || !password.trim()) {
-      setError('Please enter your password.');
-      setPasswordErrorBorder(true);
-      triggerShake();
-      showToast('Please enter your password.', 'error');
-      return;
-    }
-
-    // 3. Email format check
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      setError('Please enter a valid admin email address.');
-      showToast('Please enter a valid admin email address.', 'error');
-      return;
-    }
-
-    // 4. SQL Injection / XSS detection
-    const maliciousPattern = /['";]|--|<script>|javascript:/i;
-    if (maliciousPattern.test(email) || maliciousPattern.test(password)) {
-      setError('Invalid characters detected in input.');
-      showToast('Invalid characters detected in input.', 'error');
-      return;
-    }
-
-    // 5. Email existence check
-    const validEmails = ['admin@smartledgerx.io', 'rahul.sharma@fintech.io', 'souvikdashbbsr@gmail.com'];
-    if (!validEmails.includes(email.trim().toLowerCase())) {
-      setError('Admin account not found.');
-      showToast('Admin account not found.', 'error');
-      return;
-    }
-
     setIsLoading(true);
 
     setTimeout(() => {
-      const validPassword = password === 'admin123' || password === 'SecureAdmin#2026';
+      if (!email || !password) {
+        setError('Please enter both email and password.');
+        setIsLoading(false);
+        return;
+      }
 
-      if (validPassword) {
-        localStorage.removeItem('admin_failed_attempts');
-        localStorage.removeItem('admin_lockout_until');
-        setFailedAttempts(0);
-
-        showToast('Authentication successful. Redirecting...', 'success');
-        adminLogin(email, password, rememberMe);
-        setTimeout(() => {
-          navigate('/admin/dashboard', { replace: true });
-        }, 500);
+      const success = adminLogin(email, password);
+      if (success) {
+        navigate('/admin/dashboard', { replace: true });
       } else {
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-        localStorage.setItem('admin_failed_attempts', newAttempts.toString());
-
-        if (newAttempts >= 5) {
-          const lockoutTime = Date.now() + 5 * 60 * 1000;
-          setLockoutUntil(lockoutTime);
-          localStorage.setItem('admin_lockout_until', lockoutTime.toString());
-          setError('Too many failed attempts. Try again in 5 minutes.');
-          showToast('Too many failed attempts. Try again in 5 minutes.', 'error');
-        } else {
-          setError('Incorrect email or password.');
-          setPasswordErrorBorder(true);
-          triggerShake();
-          showToast('Incorrect email or password.', 'error');
-        }
+        setError('Invalid administrator credentials.');
         setIsLoading(false);
       }
-    }, 800);
-  };
-
-  const triggerShake = () => {
-    setShakePassword(true);
-    setTimeout(() => setShakePassword(false), 500);
+    }, 600);
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setForgotError('');
-    if (!forgotEmail || !forgotEmail.trim()) {
-      setForgotError('Please enter your admin email.');
-      return;
-    }
-    const validEmails = ['admin@smartledgerx.io', 'rahul.sharma@fintech.io', 'souvikdashbbsr@gmail.com'];
-    if (!validEmails.includes(forgotEmail.trim().toLowerCase())) {
-      setForgotError('Admin account not found.');
-      return;
-    }
-
+    if (!forgotEmail) return;
     setForgotSent(true);
     setTimeout(() => {
       setShowForgotModal(false);
       setForgotSent(false);
       setForgotEmail('');
-      showToast('Password reset instructions sent to your admin email.');
+      alert('Password reset instructions sent to your admin email.');
     }, 1500);
   };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className={cn(
-              "fixed top-6 right-6 z-50 px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border backdrop-blur-xl",
-              toast.type === 'success' 
-                ? "bg-emerald-600 text-white border-emerald-400/30" 
-                : "bg-red-600 text-white border-red-400/30"
-            )}
-          >
-            {toast.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-            <span className="font-semibold text-sm">{toast.message}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Dynamic Background Glows */}
       <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-blue-600/15 rounded-full blur-[140px] pointer-events-none animate-pulse" style={{ animationDuration: '8s' }} />
       <div className="absolute bottom-[-20%] right-[-20%] w-[50%] h-[50%] bg-emerald-600/15 rounded-full blur-[140px] pointer-events-none animate-pulse" style={{ animationDuration: '10s' }} />
@@ -231,12 +89,6 @@ export default function AdminLogin() {
           </motion.div>
         )}
 
-        {countdown > 0 && (
-          <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm text-center font-medium">
-            Too many failed attempts. Try again in {Math.floor(countdown / 60)}m {countdown % 60}s.
-          </div>
-        )}
-
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Admin Email</label>
@@ -255,10 +107,7 @@ export default function AdminLogin() {
             </div>
           </div>
 
-          <motion.div
-            animate={shakePassword ? { x: [-10, 10, -10, 10, 0] } : { x: 0 }}
-            transition={{ duration: 0.4 }}
-          >
+          <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Password</label>
               <button 
@@ -274,24 +123,15 @@ export default function AdminLogin() {
                 <Lock size={18} />
               </div>
               <input 
-                type={showPassword ? "text" : "password"}
+                type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
-                className={`w-full bg-black/40 border rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-neutral-600 focus:outline-none transition-colors ${
-                  passwordErrorBorder ? 'border-red-500 focus:border-red-500' : 'border-white/10 focus:border-emerald-500'
-                }`}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-neutral-500 hover:text-neutral-300 transition-colors"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
             </div>
-          </motion.div>
+          </div>
 
           <div className="flex items-center">
             <label className="flex items-center gap-2 cursor-pointer text-sm text-neutral-400 select-none">
@@ -307,14 +147,11 @@ export default function AdminLogin() {
 
           <button 
             type="submit" 
-            disabled={isLoading || countdown > 0}
-            className="w-full py-4 bg-gradient-to-r from-blue-600 to-emerald-500 text-white font-bold rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:opacity-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 cursor-pointer"
+            disabled={isLoading}
+            className="w-full py-4 bg-gradient-to-r from-blue-600 to-emerald-500 text-white font-bold rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:opacity-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
           >
             {isLoading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Logging in...</span>
-              </>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 <span>Access Admin Panel</span>
@@ -327,7 +164,7 @@ export default function AdminLogin() {
         <div className="mt-8 pt-6 border-t border-white/10 text-center">
           <button 
             onClick={() => navigate('/')} 
-            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer"
+            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
           >
             ← Back to SmartLedgerX App
           </button>
@@ -341,13 +178,6 @@ export default function AdminLogin() {
             <h3 className="text-xl font-bold mb-2">Reset Admin Password</h3>
             <p className="text-neutral-400 text-sm mb-6">Enter your registered admin email to receive secure recovery instructions.</p>
             
-            {forgotError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-                <AlertCircle size={16} />
-                <span>{forgotError}</span>
-              </div>
-            )}
-
             {forgotSent ? (
               <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3">
                 <CheckCircle2 size={20} />
@@ -364,8 +194,8 @@ export default function AdminLogin() {
                   className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
                 />
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowForgotModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm cursor-pointer">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-sm cursor-pointer">Send Link</button>
+                  <button type="button" onClick={() => setShowForgotModal(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-sm">Send Link</button>
                 </div>
               </form>
             )}

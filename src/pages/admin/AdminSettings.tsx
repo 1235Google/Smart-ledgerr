@@ -4,8 +4,7 @@ import { Settings, Lock, Moon, Database, Upload, Download, CheckCircle2 } from '
 import { useStore } from '../../context/StoreContext';
 
 export default function AdminSettings() {
-  const store = useStore();
-  const { importData } = store;
+  const { importData } = useStore();
   const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -29,7 +28,7 @@ export default function AdminSettings() {
   };
 
   const handleBackupDatabase = () => {
-    const data = JSON.stringify(store, null, 2);
+    const data = localStorage.getItem('smart-ledger-data') || '{}';
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

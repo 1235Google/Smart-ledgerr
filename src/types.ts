@@ -29,7 +29,7 @@ export interface PendingMoney {
   amount: number;
   reason: string;
   dueDate: string;
-  status: 'pending' | 'completed' | 'overdue';
+  status: 'pending' | 'completed' | 'overdue' | 'cancelled' | 'closed';
   reminderFrequency: 'once' | '3days' | '7days' | '15days' | 'monthly';
   nextReminderDate: string;
   reminderStatus: 'active' | 'paused';
@@ -186,6 +186,26 @@ export interface Customer {
   createdAt: string;
 }
 
+export interface ReminderHistoryLog {
+  id: string;
+  transactionId: string;
+  customerName: string;
+  amount: number;
+  dateTime: string;
+  sentVia: 'WhatsApp' | 'Email' | 'Manual';
+  reminderCount: number;
+  nextReminderDate: string | null;
+}
+
+export interface ReminderDetails {
+  remindersSent: number;
+  totalReminders: number;
+  nextReminderDate: string | null;
+  nextReminderDisplay: string;
+  lastSentDisplay?: string;
+  isStopped: boolean;
+}
+
 export interface AppState {
   isSetupComplete: boolean;
   startingBalance: number;
@@ -204,6 +224,8 @@ export interface AppState {
   aiRecognitionHistory?: AiRecognitionHistory[];
   posterTemplates?: PosterTemplate[];
   userProfile?: UserProfile;
+  reminderHistory?: ReminderHistoryLog[];
+  customReminderTemplate?: string;
 }
 
 

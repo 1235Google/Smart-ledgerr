@@ -1,20 +1,22 @@
 import React, { useRef, useState } from 'react';
 import { useStore } from '../context/StoreContext';
-import { Settings as SettingsIcon, Download, Upload, RefreshCw, Wallet, Trash2, Moon, Lock, Shield, Smartphone, Mail, Send, CalendarClock, Globe } from 'lucide-react';
+import { Settings as SettingsIcon, Download, Upload, RefreshCw, Wallet, Trash2, Moon, Lock, Shield, Smartphone, Mail, Send, CalendarClock, Globe, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, formatCurrency, formatDate, formatDateTime } from '../lib/utils';
+import { cn, formatCurrency, formatDate, formatDateTime, DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { ReceivedMoney } from '../types';
 
 import BiometricSettings from '../components/BiometricSettings';
 import ResetDataModal from "../components/ResetDataModal";
 
 export default function Settings() {
-  const { startingBalance, setStartingBalance, resetData, importData, transactions, securitySettings, updateSecuritySettings, emailSettings, updateEmailSettings, emailHistory, addEmailHistoryLog, currentBalance, generalSettings, updateGeneralSettings } = useStore();
+  const { startingBalance, setStartingBalance, resetData, importData, transactions, securitySettings, updateSecuritySettings, emailSettings, updateEmailSettings, emailHistory, addEmailHistoryLog, currentBalance, generalSettings, updateGeneralSettings, customReminderTemplate, updateCustomReminderTemplate } = useStore();
   const [newBalance, setNewBalance] = useState(startingBalance.toString());
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [pinSetupStep, setPinSetupStep] = useState<'create' | 'confirm'>('create');
   const [tempPin, setTempPin] = useState('');
   const [pinInput, setPinInput] = useState('');
+  const [templateInput, setTemplateInput] = useState(() => customReminderTemplate || DEFAULT_REMINDER_TEMPLATE);
+  const [templateSavedMessage, setTemplateSavedMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [emailInput, setEmailInput] = useState(emailSettings.emailAddress || '');
@@ -324,6 +326,59 @@ export default function Settings() {
               <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
               <option value="UTC">UTC</option>
             </select>
+          </div>
+        </motion.div>
+
+        {/* Reminder Template Setting */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }} className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-500/10 rounded-xl text-amber-400"><Bell size={20} /></div>
+              <div>
+                <h2 className="text-lg font-bold text-white">WhatsApp Reminder Template</h2>
+                <p className="text-sm text-slate-400">Customize default text sent when tapping Remind.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                updateCustomReminderTemplate(DEFAULT_REMINDER_TEMPLATE);
+                setTemplateInput(DEFAULT_REMINDER_TEMPLATE);
+                setTemplateSavedMessage('Reset to Default');
+                setTimeout(() => setTemplateSavedMessage(''), 3000);
+              }}
+              className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline"
+            >
+              Reset Default
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <textarea
+              value={templateInput}
+              onChange={(e) => setTemplateInput(e.target.value)}
+              rows={8}
+              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 font-mono resize-y"
+            />
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[10px] text-slate-400">
+                Placeholders: &#123;CustomerName&#125;, &#123;AmountDue&#125;, &#123;DueDate&#125;, &#123;OverdueDays&#125;
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  updateCustomReminderTemplate(templateInput);
+                  setTemplateSavedMessage('✅ Saved Template');
+                  setTimeout(() => setTemplateSavedMessage(''), 3000);
+                }}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20"
+              >
+                Save Template
+              </button>
+            </div>
+            {templateSavedMessage && (
+              <p className="text-xs text-amber-400 font-semibold">{templateSavedMessage}</p>
+            )}
           </div>
         </motion.div>
 

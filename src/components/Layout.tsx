@@ -9,6 +9,8 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Wallet, label: 'Current Balance', path: '/balance' },
   { icon: Download, label: 'Money Received', path: '/received' },
+  { icon: Clock, label: 'Pending Payments', path: '/pending' },
+  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: Search, label: 'Search', path: '/search' },
   { icon: Target, label: 'Goal Planner', path: '/goals' },
   { icon: PiggyBank, label: 'Gullak Savings', path: '/gullak' },

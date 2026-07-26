@@ -1,36 +1,22 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive } from 'lucide-react';
-import { formatCurrency, formatDate } from '../lib/utils';
+import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell } from 'lucide-react';
+import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, DEFAULT_CARD_REMINDER_TEMPLATE, DEFAULT_REMINDER_TEMPLATE, formatReminderMessage } from '../lib/utils';
 import { PendingMoney } from '../types';
 
 const getInitials = (name: string) => {
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 };
 
-const getDaysDiff = (dateStr: string) => {
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const target = new Date(dateStr);
-  target.setHours(0,0,0,0);
-  const diffTime = target.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-};
-
-const getDeterministicStats = (id: string, amount: number, dueDate: string) => {
+const getProbability = (id: string, amount: number, dueDate: string) => {
   const daysDiff = getDaysDiff(dueDate);
   let baseProb = 85;
   if (daysDiff < 0) baseProb -= Math.min(Math.abs(daysDiff) * 2, 40);
   if (amount > 50000) baseProb -= 10;
   
   const charCode = id.charCodeAt(0) || 0;
-  const probability = Math.max(10, Math.min(99, baseProb + (charCode % 15)));
-  
-  const remindersSent = (charCode % 4) + 1;
-  const totalReminders = remindersSent + (charCode % 3) + 1;
-  
-  return { probability, remindersSent, totalReminders };
+  return Math.max(10, Math.min(99, baseProb + (charCode % 15)));
 };
 
 const getPenaltyAmount = (tx: PendingMoney, daysDiff: number) => {
@@ -99,6 +85,7 @@ function PaymentCard({
   reminderConfirmId,
   setReminderConfirmId,
   onConfirmWhatsApp,
+  onRemind,
   isGeneratingAiMessage
 }: { 
   tx: PendingMoney, 
@@ -112,6 +99,7 @@ function PaymentCard({
   reminderConfirmId: string | null,
   setReminderConfirmId: (id: string | null) => void,
   onConfirmWhatsApp: (tx: PendingMoney) => void,
+  onRemind: (tx: PendingMoney) => void,
   isGeneratingAiMessage?: boolean
 }) {
   const daysDiff = getDaysDiff(tx.dueDate);
@@ -123,10 +111,17 @@ function PaymentCard({
   const penaltyAmount = getPenaltyAmount(tx, daysDiff);
   const totalDue = tx.amount + penaltyAmount;
   
-  const { probability, remindersSent, totalReminders } = getDeterministicStats(tx.id, tx.amount, tx.dueDate);
+  const probability = getProbability(tx.id, tx.amount, tx.dueDate);
+  const reminderDetails = calculateReminderDetails(tx, generalSettings?.timezone);
+  const remindersSent = reminderDetails.remindersSent;
+  const totalReminders = reminderDetails.totalReminders;
   const progressPercent = Math.round((remindersSent / totalReminders) * 100);
 
   const [showMenu, setShowMenu] = useState(false);
+  const [isEditingCardMsg, setIsEditingCardMsg] = useState(false);
+  const [cardMsgTemplate, setCardMsgTemplate] = useState(() => DEFAULT_CARD_REMINDER_TEMPLATE);
+
+  const formattedName = formatName(tx.personName);
 
   return (
     <motion.div
@@ -134,26 +129,26 @@ function PaymentCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ delay: 0.05 * idx }}
-      className="group bg-neutral-900/50 backdrop-blur-xl border border-white/10 hover:border-white/20 p-5 rounded-[2rem] flex flex-col gap-5 relative overflow-hidden transition-all shadow-xl hover:shadow-2xl"
+      transition={{ duration: 0.2, delay: 0.04 * idx, ease: "easeOut" }}
+      className="group bg-neutral-900/60 backdrop-blur-xl border border-white/10 hover:border-white/20 p-5 rounded-[2rem] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-xl shadow-black/20 hover:shadow-2xl hover:shadow-black/30"
     >
       {/* Header */}
       <div className="flex justify-between items-start gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-inner">
-            {getInitials(tx.personName)}
+            {getInitials(formattedName)}
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white leading-tight">{tx.personName}</h3>
+            <h3 className="text-lg font-bold text-white leading-tight">{formattedName}</h3>
             <div className="flex items-center gap-2 mt-1">
               {isPaid ? (
-                <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider border border-green-500/20">Paid</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider border border-green-500/20">Paid</span>
               ) : isPaused ? (
-                <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] font-bold uppercase tracking-wider border border-yellow-500/20">Paused</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-400 text-[10px] font-bold uppercase tracking-wider border border-yellow-500/20">Paused</span>
               ) : isOverdue ? (
-                <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-bold uppercase tracking-wider border border-red-500/20">Overdue</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-bold uppercase tracking-wider border border-red-500/20">Overdue</span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">Active</span>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-wider border border-blue-500/20">Active</span>
               )}
             </div>
           </div>
@@ -172,8 +167,8 @@ function PaymentCard({
       {penaltyAmount > 0 && !isPaid && (
          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex justify-between items-center mt-1">
             <div className="flex flex-col">
-               <span className="text-xs text-red-400 font-semibold">Includes Late Penalty</span>
-               <span className="text-[10px] text-slate-400">{tx.penaltyType === 'fixed' ? 'Fixed Amount' : 'Percentage Based'}</span>
+               <span className="text-xs text-red-400 font-semibold">Late Penalty</span>
+               <span className="text-[10px] text-slate-400 font-medium">{tx.penaltyType === 'fixed' ? 'Fixed Charge' : 'Percentage Based'}</span>
             </div>
             <span className="text-sm font-bold text-red-400">+{formatCurrency(penaltyAmount)}</span>
          </div>
@@ -187,8 +182,8 @@ function PaymentCard({
             <div className="text-purple-400 mt-0.5"><Brain size={18} /></div>
             <div>
               <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">AI Insight</p>
-              <p className="text-sm font-semibold text-white">{probability}% Probability</p>
-              <p className="text-xs text-slate-400 mt-1">Likely to pay within {probability > 80 ? '5' : '15'} days.</p>
+              <p className="text-sm font-bold text-white">{probability}% Collection Chance</p>
+              <p className="text-xs text-slate-400 mt-1">Expected payment within {probability > 80 ? '5' : '15'} days.</p>
             </div>
           </div>
           
@@ -196,18 +191,81 @@ function PaymentCard({
           <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-center">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reminder Progress</span>
-              <span className="text-xs font-semibold text-white">{remindersSent} of {totalReminders}</span>
+              <span className="text-xs font-semibold text-white">{remindersSent} / {totalReminders} Sent</span>
             </div>
             <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${progressPercent}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
                 className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"
               />
             </div>
-            <p className="text-xs text-slate-500 mt-2 truncate">Next: {formatDate(tx.nextReminderDate, generalSettings?.timezone)} • {tx.reminderFrequency}</p>
+            <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-[11px] text-slate-400/90 font-medium">
+              <span>Last: {reminderDetails.lastSentDisplay || 'None'}</span>
+              <span>Next: {reminderDetails.isStopped ? 'Completed' : (reminderDetails.nextReminderDisplay === 'Today' ? 'Today' : (reminderDetails.nextReminderDate ? formatDate(reminderDetails.nextReminderDate, generalSettings?.timezone) : 'N/A'))}</span>
+              <span>Status: {tx.phoneNumber ? 'Delivered' : 'Pending'}</span>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Reminder Message Card */}
+      {!isPaid && (
+        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 relative group/cardmsg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              🔔 REMINDER MESSAGE
+            </span>
+            <div className="flex items-center gap-2">
+              {isEditingCardMsg ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCardMsgTemplate(DEFAULT_CARD_REMINDER_TEMPLATE);
+                    setIsEditingCardMsg(false);
+                  }}
+                  className="text-[10px] font-semibold text-slate-400 hover:text-white underline transition-colors"
+                >
+                  Reset to Default
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCardMsg(true)}
+                  title="Edit Reminder Message"
+                  aria-label="Edit Reminder Message"
+                  className="text-slate-400 hover:text-amber-400 p-1 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <Edit2 size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isEditingCardMsg ? (
+            <div className="space-y-3 mt-1">
+              <textarea
+                value={cardMsgTemplate}
+                onChange={(e) => setCardMsgTemplate(e.target.value)}
+                rows={3}
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 resize-none font-sans"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCardMsg(false)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-black/25 p-3 rounded-xl border border-white/5">
+              {formatReminderMessage(cardMsgTemplate, tx, generalSettings?.timezone, totalDue)}
+            </p>
+          )}
         </div>
       )}
 
@@ -217,7 +275,9 @@ function PaymentCard({
           <span className="text-amber-500 mt-0.5">📝</span>
           <div>
             <span className="font-semibold text-amber-500/90 text-xs uppercase tracking-wider mb-1 block">Notes</span>
-            <span className="text-slate-300 leading-relaxed">{tx.reason}</span>
+            <span className="text-slate-300 leading-relaxed">
+              {tx.reason && tx.reason.trim() ? tx.reason : 'No notes added.'}
+            </span>
           </div>
         </div>
       </div>
@@ -226,29 +286,58 @@ function PaymentCard({
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mt-2 pt-4 border-t border-white/5 gap-3">
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
           {tx.phoneNumber && (
-            <button onClick={() => setReminderConfirmId(tx.id)} className="col-span-2 sm:col-span-1 min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-xl transition-all border border-green-500/20 group/btn">
-              <MessageCircle size={18} className="group-hover/btn:scale-110 transition-transform" />
+            <button 
+              onClick={() => setReminderConfirmId(tx.id)} 
+              aria-label="WhatsApp Reminder"
+              className="col-span-2 sm:col-span-1 min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-xl transition-all duration-200 ease-out active:scale-[0.98] border border-green-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/50 group/btn"
+            >
+              <MessageCircle size={18} className="group-hover/btn:scale-110 transition-transform duration-200" />
               <span className="text-xs font-bold">WhatsApp</span>
             </button>
           )}
           {!isPaid && (
             <>
-              <button onClick={() => onPauseResume(tx.id)} className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all border border-white/10 group/btn">
+              <button 
+                onClick={() => onPauseResume(tx.id)} 
+                aria-label={isPaused ? 'Resume Reminder' : 'Pause Reminder'}
+                className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all duration-200 ease-out active:scale-[0.98] border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 group/btn"
+              >
                 {isPaused ? <Play size={18} /> : <Pause size={18} />}
                 <span className="text-xs font-bold">{isPaused ? 'Resume' : 'Pause'}</span>
               </button>
-              <button onClick={() => onMarkReceived(tx.id)} className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-all border border-blue-500/20 group/btn">
-                <CheckCircle2 size={18} className="group-hover/btn:scale-110 transition-transform" />
-                <span className="text-xs font-bold">Received</span>
+              <button 
+                onClick={() => onMarkReceived(tx.id)} 
+                aria-label="Mark Paid"
+                className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition-all duration-200 ease-out active:scale-[0.98] border border-blue-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 group/btn"
+              >
+                <CheckCircle2 size={18} className="group-hover/btn:scale-110 transition-transform duration-200" />
+                <span className="text-xs font-bold">Mark Paid</span>
               </button>
-              <button onClick={() => setEditingReminderId(tx.id)} className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all border border-white/10 group/btn">
-                <Edit2 size={18} className="group-hover/btn:scale-110 transition-transform" />
+              <button 
+                onClick={() => setEditingReminderId(tx.id)} 
+                aria-label="Edit Reminder Frequency"
+                className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all duration-200 ease-out active:scale-[0.98] border border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 group/btn"
+              >
+                <Edit2 size={18} className="group-hover/btn:scale-110 transition-transform duration-200" />
                 <span className="text-xs font-bold">Edit</span>
               </button>
             </>
           )}
-          <button onClick={() => onDelete(tx.id)} className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all border border-red-500/20 group/btn">
-            <Trash size={18} className="group-hover/btn:scale-110 transition-transform" />
+          <button 
+            type="button"
+            onClick={() => onRemind(tx)} 
+            aria-label="Send Reminder"
+            className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white rounded-xl transition-all duration-200 ease-out active:scale-[0.98] shadow-lg shadow-amber-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 group/btn"
+          >
+            <Bell size={18} className="group-hover/btn:scale-110 transition-transform duration-200" />
+            <span className="text-xs font-bold">Send Reminder</span>
+          </button>
+          <button 
+            onClick={() => onDelete(tx.id)} 
+            aria-label="Delete Record"
+            className="min-h-[48px] sm:w-auto px-4 flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all duration-200 ease-out active:scale-[0.98] border border-red-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50 group/btn"
+          >
+            <Trash size={18} className="group-hover/btn:scale-110 transition-transform duration-200" />
             <span className="text-xs font-bold">Delete</span>
           </button>
         </div>
@@ -288,7 +377,7 @@ function PaymentCard({
           >
             <MessageCircle size={32} className="text-green-400 mb-3" />
             <h4 className="text-lg font-bold text-white mb-2">Send WhatsApp Reminder?</h4>
-            <p className="text-sm text-slate-300 mb-6">This will generate a personalized AI message and open WhatsApp for {tx.personName}.</p>
+            <p className="text-sm text-slate-300 mb-6">This will generate a personalized AI message and open WhatsApp for {formattedName}.</p>
             <div className="flex gap-3">
               <button disabled={isGeneratingAiMessage} onClick={() => onConfirmWhatsApp(tx)} className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center min-w-[120px] disabled:opacity-50">
                 {isGeneratingAiMessage ? <Loader2 size={18} className="animate-spin" /> : 'Send Now'}
@@ -331,7 +420,7 @@ function PaymentCard({
 }
 
 export default function PendingPayments() {
-  const { addPendingMoney, markAsReceived, toggleReminderStatus, advanceReminderDate, updateReminderFrequency, transactions, deleteTransaction, generalSettings } = useStore();
+  const { addPendingMoney, markAsReceived, toggleReminderStatus, advanceReminderDate, updateReminderFrequency, transactions, deleteTransaction, generalSettings, customReminderTemplate, addReminderHistoryLog } = useStore();
   const [personName, setPersonName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -347,6 +436,7 @@ export default function PendingPayments() {
   const [reminderConfirmId, setReminderConfirmId] = useState<string | null>(null);
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [noWhatsAppTx, setNoWhatsAppTx] = useState<PendingMoney | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -402,7 +492,7 @@ export default function PendingPayments() {
     if (!personName || !amount || !dueDate || !reason) return;
 
     addPendingMoney({
-      personName,
+      personName: formatName(personName),
       phoneNumber,
       email,
       amount: Number(amount),
@@ -465,11 +555,62 @@ export default function PendingPayments() {
       setIsGeneratingAiMessage(false);
     }
 
+    const daysDiff = getDaysDiff(tx.dueDate);
+    const penalty = getPenaltyAmount(tx, daysDiff);
+    const totalDue = tx.amount + penalty;
+    const reminderDetails = calculateReminderDetails(tx, generalSettings?.timezone);
+
+    addReminderHistoryLog({
+      transactionId: tx.id,
+      customerName: formatName(tx.personName),
+      amount: totalDue,
+      dateTime: new Date().toISOString(),
+      sentVia: 'WhatsApp',
+      reminderCount: reminderDetails.remindersSent + 1,
+      nextReminderDate: reminderDetails.nextReminderDate
+    });
+
     const encodedMessage = encodeURIComponent(message);
-    const url = `https://wa.me/${tx.phoneNumber}?text=${encodedMessage}`;
+    let cleanPhone = (tx.phoneNumber || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+
+    const url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
     
     window.open(url, '_blank');
     setReminderConfirmId(null);
+    advanceReminderDate(tx.id);
+  };
+
+  const handleRemind = (tx: PendingMoney) => {
+    if (!tx.phoneNumber || !tx.phoneNumber.trim()) {
+      setNoWhatsAppTx(tx);
+      return;
+    }
+
+    const daysDiff = getDaysDiff(tx.dueDate);
+    const penalty = getPenaltyAmount(tx, daysDiff);
+    const totalDue = tx.amount + penalty;
+    const reminderDetails = calculateReminderDetails(tx, generalSettings?.timezone);
+
+    const template = customReminderTemplate || DEFAULT_REMINDER_TEMPLATE;
+    const message = formatReminderMessage(template, tx, generalSettings?.timezone, totalDue);
+
+    let cleanPhone = tx.phoneNumber.replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;
+
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+
+    addReminderHistoryLog({
+      transactionId: tx.id,
+      customerName: formatName(tx.personName),
+      amount: totalDue,
+      dateTime: new Date().toISOString(),
+      sentVia: 'WhatsApp',
+      reminderCount: reminderDetails.remindersSent + 1,
+      nextReminderDate: reminderDetails.nextReminderDate
+    });
+
     advanceReminderDate(tx.id);
   };
 
@@ -805,6 +946,7 @@ export default function PendingPayments() {
                     reminderConfirmId={reminderConfirmId}
                     setReminderConfirmId={setReminderConfirmId}
                     onConfirmWhatsApp={handleSendReminder}
+                    onRemind={handleRemind}
                     isGeneratingAiMessage={isGeneratingAiMessage && reminderConfirmId === tx.id}
                   />
                 ))}
@@ -847,6 +989,34 @@ export default function PendingPayments() {
                   Delete
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {noWhatsAppTx && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-neutral-900 border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full text-center shadow-2xl relative overflow-hidden"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">WhatsApp Number Required</h3>
+              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                WhatsApp number not available for this customer.
+              </p>
+              <button
+                type="button"
+                onClick={() => setNoWhatsAppTx(null)}
+                className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20"
+              >
+                Got It
+              </button>
             </motion.div>
           </div>
         )}

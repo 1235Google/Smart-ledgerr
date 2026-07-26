@@ -17,10 +17,10 @@ export default function AdminLogin() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
-  // If already authenticated, redirect to dashboard
+  // If already authenticated, redirect to Entries page
   React.useEffect(() => {
     if (isAdminAuthenticated) {
-      navigate('/admin/dashboard', { replace: true });
+      navigate('/admin/ledger', { replace: true });
     }
   }, [isAdminAuthenticated, navigate]);
 
@@ -38,7 +38,7 @@ export default function AdminLogin() {
 
       const success = adminLogin(email, password);
       if (success) {
-        navigate('/admin/dashboard', { replace: true });
+        navigate('/admin/ledger', { replace: true });
       } else {
         setError('Invalid administrator credentials.');
         setIsLoading(false);

@@ -26,6 +26,7 @@ interface StoreContextType extends AppState {
   addPendingMoney: (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => void;
   markAsReceived: (id: string) => void;
   deleteTransaction: (id: string) => void;
+  updateTransaction: (id: string, updated: Partial<Transaction>) => void;
   toggleReminderStatus: (id: string) => void;
   updateReminderFrequency: (id: string, frequency: PendingMoney['reminderFrequency']) => void;
   advanceReminderDate: (id: string) => void;
@@ -552,6 +553,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const updateTransaction = (id: string, updated: Partial<Transaction>) => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => t.id === id ? { ...t, ...updated } as Transaction : t)
+    }));
+  };
+
   const addGullakEntry = (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newEntry: GullakEntry = {
       ...entry,
@@ -642,6 +650,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addPendingMoney,
       markAsReceived,
       deleteTransaction,
+      updateTransaction,
       toggleReminderStatus,
       updateReminderFrequency,
       advanceReminderDate,

@@ -18,20 +18,18 @@ export default function AdminLayout() {
     return <Navigate to="/admin" replace />;
   }
 
+  if (location.pathname === '/admin' || location.pathname === '/admin/' || location.pathname === '/admin/dashboard') {
+    return <Navigate to="/admin/ledger" replace />;
+  }
+
   const handleLogout = () => {
     adminLogout();
     navigate('/admin', { replace: true });
   };
 
   const navItems = [
-    { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Users', path: '/admin/users', icon: Users },
-    { label: 'Ledger Records', path: '/admin/ledger', icon: Wallet },
-    { label: 'Money Received', path: '/admin/received', icon: ArrowDownLeft },
+    { label: 'Entries', path: '/admin/ledger', icon: Wallet },
     { label: 'Pending Payments', path: '/admin/pending', icon: ArrowUpRight },
-    { label: 'Reminder Manager', path: '/admin/reminders', icon: Bell },
-    { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
-    { label: 'Reports', path: '/admin/reports', icon: FileText },
     { label: 'Settings', path: '/admin/settings', icon: Settings },
   ];
 

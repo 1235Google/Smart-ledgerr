@@ -30,6 +30,7 @@ import AdminReminders from './pages/admin/AdminReminders';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminGullak from './pages/admin/AdminGullak';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isSetupComplete, isLoading } = useStore();
@@ -78,6 +79,7 @@ function AppRoutes() {
         <Route path="reminders" element={<AdminReminders />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="reports" element={<AdminReports />} />
+        <Route path="gullak" element={<AdminGullak />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
       <Route path="/setup" element={

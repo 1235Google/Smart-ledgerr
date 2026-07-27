@@ -5,7 +5,8 @@ import {
   ExportFormat, 
   ExportFilterType, 
   generateEntriesReport, 
-  generatePendingReport, 
+  generatePendingReport,
+  generateGullakReport,
   filterRecordsForExport 
 } from '../lib/reportsExportEngine';
 
@@ -13,7 +14,7 @@ interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
-  reportType: 'entries' | 'pending';
+  reportType: 'entries' | 'pending' | 'gullak';
   records: any[];
   selectedIds?: string[];
 }
@@ -74,6 +75,8 @@ export default function ExportModal({
 
       if (reportType === 'entries') {
         await generateEntriesReport(options);
+      } else if (reportType === 'gullak') {
+        await generateGullakReport(options);
       } else {
         await generatePendingReport(options);
       }

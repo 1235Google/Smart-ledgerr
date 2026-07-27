@@ -30,6 +30,7 @@ export default function AdminLayout() {
   const navItems = [
     { label: 'Entries', path: '/admin/ledger', icon: Wallet },
     { label: 'Pending Payments', path: '/admin/pending', icon: ArrowUpRight },
+    { label: 'Gullak Entries', path: '/admin/gullak', icon: Wallet },
     { label: 'Settings', path: '/admin/settings', icon: Settings },
   ];
 

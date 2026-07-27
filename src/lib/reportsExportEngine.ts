@@ -15,7 +15,7 @@ export interface ExportOptions {
   selectedIds?: string[];
   records: any[];
   title?: string;
-  reportType: 'entries' | 'pending';
+  reportType: 'entries' | 'pending' | 'gullak';
 }
 
 // Helper to clean & parse date strings reliably
@@ -528,5 +528,30 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
     });
 
     doc.save(`SmartLedger_Pending_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  }
+}
+
+export async function generateGullakReport(options: ExportOptions): Promise<void> {
+  const filteredData = filterRecordsForExport(options.records, options);
+  const dateStrPretty = format(new Date(), 'dd MMM yyyy, hh:mm a');
+
+  if (options.format === 'excel') {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Gullak Entries');
+    ws.addRow(['Date', 'Type', 'Amount', 'Notes']);
+    filteredData.forEach(item => {
+      ws.addRow([item.date, item.category, item.amount, item.note]);
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  } else {
+    const doc = new jsPDF();
+    doc.text('Gullak Entries Report', 14, 14);
+    autoTable(doc, {
+      head: [['Date', 'Type', 'Amount', 'Notes']],
+      body: filteredData.map(item => [item.date, item.category, item.amount, item.note]),
+      startY: 20
+    });
+    doc.save(`Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   }
 }

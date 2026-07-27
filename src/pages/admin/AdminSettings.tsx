@@ -87,46 +87,44 @@ export default function AdminSettings() {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      try {
-        const result = updateAdminPassword(cPass, nPass);
+    try {
+      const result = await updateAdminPassword(cPass, nPass);
 
-        if (!result.success) {
-          const nextFailed = failedAttempts + 1;
-          setFailedAttempts(nextFailed);
+      if (!result.success) {
+        const nextFailed = failedAttempts + 1;
+        setFailedAttempts(nextFailed);
 
-          if (nextFailed >= 5) {
-            const lockUntil = Date.now() + 30000;
-            setLockoutTime(lockUntil);
-            setError("Too many failed attempts. Please wait 30 seconds before trying again.");
-          } else {
-            setError(result.error || "Current password is incorrect.");
-          }
-          setIsLoading(false);
-          return;
-        }
-
-        setFailedAttempts(0);
-        setLockoutTime(null);
-        setPassSuccess(true);
-        setCurrentPass('');
-        setNewPass('');
-        setConfirmPass('');
-        setIsLoading(false);
-
-        setTimeout(() => {
-          setPassSuccess(false);
-        }, 4000);
-
-      } catch (err: any) {
-        setIsLoading(false);
-        if (err.message?.includes('network') || !navigator.onLine) {
-          setError("Network error. Please check your internet connection and try again.");
+        if (nextFailed >= 5) {
+          const lockUntil = Date.now() + 5 * 60 * 1000;
+          setLockoutTime(lockUntil);
+          setError("Too many failed attempts. Please wait 5 minutes before trying again.");
         } else {
-          setError("An unexpected error occurred. Please try again.");
+          setError(result.error || "Current password is incorrect.");
         }
+        setIsLoading(false);
+        return;
       }
-    }, 400);
+
+      setFailedAttempts(0);
+      setLockoutTime(null);
+      setPassSuccess(true);
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+      setIsLoading(false);
+
+      setTimeout(() => {
+        setPassSuccess(false);
+      }, 4000);
+
+    } catch (err: any) {
+      setIsLoading(false);
+      if (err.message?.includes('network') || !navigator.onLine) {
+        setError("Network error. Please check your internet connection and try again.");
+      } else {
+        setError("An unexpected error occurred. Please try again.");
+      }
+    }
   };
 
   const handleBackupDatabase = () => {

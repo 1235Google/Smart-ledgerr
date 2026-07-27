@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar, Plus, Edit2, Trash2, CheckCircle2, Bell, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Search, Calendar, Plus, Edit2, Trash2, CheckCircle2, Bell, X, ArrowUpDown, ChevronLeft, ChevronRight, Filter, Download } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Transaction } from '../../types';
+import ExportModal from '../../components/ExportModal';
 
 export default function AdminPending() {
   const { transactions, addPendingMoney, markAsReceived, deleteTransaction, updateTransaction } = useStore();
@@ -14,6 +15,7 @@ export default function AdminPending() {
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Transaction | null>(null);
 
   // Form states
@@ -195,10 +197,20 @@ export default function AdminPending() {
             </select>
           </div>
 
+          {/* Export Pending Button */}
+          <button 
+            onClick={() => setShowExportModal(true)}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all border border-white/10 hover:border-white/20 shrink-0 min-h-[44px]"
+            title="Export Pending Payments as Excel or PDF"
+          >
+            <Download size={18} className="text-amber-400" />
+            <span>Export Pending</span>
+          </button>
+
           {/* Add Pending Payment Button */}
           <button 
             onClick={openAddModal}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0 min-h-[44px]"
           >
             <Plus size={18} />
             <span>Add Pending Payment</span>
@@ -508,6 +520,15 @@ export default function AdminPending() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Export Pending Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        reportType="pending"
+        title="Export Pending Payments Report"
+        records={rawPending}
+      />
     </div>
   );
 }

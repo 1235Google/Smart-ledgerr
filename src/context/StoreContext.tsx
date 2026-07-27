@@ -61,9 +61,9 @@ interface StoreContextType extends AppState {
   clearNewlyUnlocked: () => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
   isAdminAuthenticated: boolean;
-  adminLogin: (email: string, pass: string) => boolean;
+  adminLogin: (pass: string, email?: string) => Promise<{ success: boolean; error?: string }>;
   adminLogout: () => void;
-  updateAdminPassword: (currentPass: string, newPass: string) => { success: boolean; error?: string };
+  updateAdminPassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const defaultState: AppState = {
@@ -217,45 +217,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return sessionStorage.getItem('smartledger-admin-auth') === 'true';
   });
 
-  const getAdminPassHash = () => {
-    return state.securitySettings?.adminPasswordHash || CryptoJS.SHA256('admin123').toString();
-  };
-
-  const adminLogin = (email: string, pass: string) => {
-    if (!email || !pass) return false;
-    const inputHash = CryptoJS.SHA256(pass).toString();
-    const currentHash = getAdminPassHash();
-    if (inputHash === currentHash) {
-      setIsAdminAuthenticated(true);
-      sessionStorage.setItem('smartledger-admin-auth', 'true');
-      return true;
+  useEffect(() => {
+    const token = sessionStorage.getItem('smartledger-admin-session');
+    if (token) {
+      fetch('/api/admin/verify-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.valid) {
+          setIsAdminAuthenticated(false);
+          sessionStorage.removeItem('smartledger-admin-auth');
+          sessionStorage.removeItem('smartledger-admin-session');
+        }
+      })
+      .catch(() => {});
     }
-    return false;
-  };
+  }, []);
 
-  const updateAdminPassword = (currentPass: string, newPass: string) => {
-    const inputHash = CryptoJS.SHA256(currentPass).toString();
-    const currentHash = getAdminPassHash();
-    
-    if (inputHash !== currentHash) {
-      return { success: false, error: 'Current password is incorrect.' };
-    }
+  const adminLogin = async (pass: string, email?: string) => {
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pass, email })
+      });
 
-    const newHash = CryptoJS.SHA256(newPass).toString();
-    setState(prev => ({
-      ...prev,
-      securitySettings: {
-        ...prev.securitySettings,
-        adminPasswordHash: newHash
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsAdminAuthenticated(true);
+        if (data.token) {
+          sessionStorage.setItem('smartledger-admin-session', data.token);
+        }
+        sessionStorage.setItem('smartledger-admin-auth', 'true');
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Invalid Admin Password' };
       }
-    }));
+    } catch (err: any) {
+      console.error("[AdminAuth] Login error:", err);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
+  };
 
-    return { success: true };
+  const updateAdminPassword = async (currentPass: string, newPass: string) => {
+    try {
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || 'Failed to update password.' };
+      }
+    } catch (err: any) {
+      console.error("[AdminAuth] Change password error:", err);
+      return { success: false, error: 'Network error. Please try again.' };
+    }
   };
 
   const adminLogout = () => {
+    const token = sessionStorage.getItem('smartledger-admin-session');
+    if (token) {
+      fetch('/api/admin/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      }).catch(() => {});
+    }
     setIsAdminAuthenticated(false);
     sessionStorage.removeItem('smartledger-admin-auth');
+    sessionStorage.removeItem('smartledger-admin-session');
   };
 
   const clearNewlyUnlocked = () => setNewlyUnlocked(null);

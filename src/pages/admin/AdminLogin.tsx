@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ShieldCheck, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 export default function AdminLogin() {
@@ -9,7 +9,8 @@ export default function AdminLogin() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('admin@smartledgerx.io');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -17,33 +18,43 @@ export default function AdminLogin() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+
   // If already authenticated, redirect to Entries page
-  React.useEffect(() => {
+  useEffect(() => {
     if (isAdminAuthenticated) {
       navigate('/admin/ledger', { replace: true });
     }
   }, [isAdminAuthenticated, navigate]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  useEffect(() => {
+    passwordInputRef.current?.focus();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const trimmedPassword = password.trim();
+    if (!trimmedPassword) {
+      setError('Please enter the admin password.');
+      return;
+    }
+
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (!email || !password) {
-        setError('Please enter both email and password.');
-        setIsLoading(false);
-        return;
-      }
-
-      const success = adminLogin(email, password);
-      if (success) {
+    try {
+      const result = await adminLogin(trimmedPassword, email);
+      if (result.success) {
         navigate('/admin/ledger', { replace: true });
       } else {
-        setError('Invalid administrator credentials.');
-        setIsLoading(false);
+        setError(result.error || 'Invalid Admin Password');
       }
-    }, 600);
+    } catch (err: any) {
+      setError('An error occurred during verification. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleForgotSubmit = (e: React.FormEvent) => {
@@ -77,15 +88,15 @@ export default function AdminLogin() {
             </div>
           </div>
           <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-neutral-200 to-emerald-400">
-            SmartLedgerX Admin
+            SmartLedger Admin
           </h1>
-          <p className="text-neutral-400 text-sm mt-1">Secure Management Portal</p>
+          <p className="text-neutral-400 text-sm mt-1">Centralized Admin Portal</p>
         </div>
 
         {error && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
             <AlertCircle size={18} className="shrink-0" />
-            <span>{error}</span>
+            <span className="font-medium">{error}</span>
           </motion.div>
         )}
 
@@ -102,14 +113,15 @@ export default function AdminLogin() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="admin@smartledgerx.io"
-                className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
               />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Password</label>
+              <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Admin Password</label>
               <button 
                 type="button" 
                 onClick={() => setShowForgotModal(true)}
@@ -123,13 +135,24 @@ export default function AdminLogin() {
                 <Lock size={18} />
               </div>
               <input 
-                type="password" 
+                ref={passwordInputRef}
+                type={showPassword ? "text" : "password"} 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="••••••••"
-                className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors"
+                placeholder="Enter admin password"
+                disabled={isLoading}
+                className="w-full bg-black/40 border border-white/10 rounded-xl pl-11 pr-11 py-3.5 text-white placeholder-neutral-600 focus:outline-none focus:border-emerald-500 transition-colors disabled:opacity-50"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1 transition-colors"
+                title={showPassword ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
@@ -141,7 +164,7 @@ export default function AdminLogin() {
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="rounded bg-black/40 border-white/20 text-emerald-500 focus:ring-emerald-500 w-4 h-4" 
               />
-              <span>Remember this device</span>
+              <span>Remember session</span>
             </label>
           </div>
 
@@ -151,7 +174,10 @@ export default function AdminLogin() {
             className="w-full py-4 bg-gradient-to-r from-blue-600 to-emerald-500 text-white font-bold rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:opacity-95 transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
           >
             {isLoading ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <>
+                <Loader2 size={18} className="animate-spin text-white" />
+                <span>Verifying Password...</span>
+              </>
             ) : (
               <>
                 <span>Access Admin Panel</span>
@@ -166,7 +192,7 @@ export default function AdminLogin() {
             onClick={() => navigate('/')} 
             className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
           >
-            ← Back to SmartLedgerX App
+            ← Back to SmartLedger App
           </button>
         </div>
       </motion.div>

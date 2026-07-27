@@ -5,6 +5,17 @@ import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
 import { generateAndSendReport } from "./src/server/report-generator";
+import { 
+  hashPassword, 
+  getStoredHash, 
+  updateStoredHash, 
+  checkRateLimit, 
+  recordFailedAttempt, 
+  resetFailedAttempts, 
+  createSessionToken, 
+  verifySessionToken, 
+  invalidateSessionToken 
+} from "./src/server/admin-auth";
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 // Load environment variables from .env file
@@ -189,6 +200,119 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // --- Centralized Admin Authentication API Endpoints ---
+  app.post("/api/admin/login", (req, res) => {
+    try {
+      const { password } = req.body;
+      const clientIp = (req.ip || req.headers['x-forwarded-for'] || 'default_client') as string;
+
+      // Check rate limit
+      const rateLimitStatus = checkRateLimit(clientIp);
+      if (rateLimitStatus.locked) {
+        return res.status(429).json({
+          success: false,
+          error: "Too many failed attempts. Login locked for 5 minutes."
+        });
+      }
+
+      if (!password || typeof password !== 'string' || !password.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: "Please enter the admin password."
+        });
+      }
+
+      const inputHash = hashPassword(password.trim());
+      const currentHash = getStoredHash();
+
+      if (inputHash === currentHash) {
+        resetFailedAttempts(clientIp);
+        const token = createSessionToken();
+        return res.json({
+          success: true,
+          token,
+          message: "Admin authenticated successfully."
+        });
+      } else {
+        const attemptResult = recordFailedAttempt(clientIp);
+        if (attemptResult.locked) {
+          return res.status(429).json({
+            success: false,
+            error: "Too many failed attempts. Login locked for 5 minutes."
+          });
+        } else {
+          return res.status(401).json({
+            success: false,
+            error: "Invalid Admin Password"
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("[AdminAuth] Login error:", err);
+      return res.status(500).json({ success: false, error: "An internal server error occurred." });
+    }
+  });
+
+  app.post("/api/admin/change-password", (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, error: "Missing required fields." });
+      }
+
+      const cPass = currentPassword.trim();
+      const nPass = newPassword.trim();
+
+      const inputHash = hashPassword(cPass);
+      const currentHash = getStoredHash();
+
+      if (inputHash !== currentHash) {
+        return res.status(401).json({ success: false, error: "Current password is incorrect." });
+      }
+
+      // Password Validation Rules
+      if (nPass.length < 8) {
+        return res.status(400).json({ success: false, error: "Password must be at least 8 characters long." });
+      }
+      if (!/[A-Z]/.test(nPass)) {
+        return res.status(400).json({ success: false, error: "Password must contain at least one uppercase letter." });
+      }
+      if (!/[a-z]/.test(nPass)) {
+        return res.status(400).json({ success: false, error: "Password must contain at least one lowercase letter." });
+      }
+      if (!/[0-9]/.test(nPass)) {
+        return res.status(400).json({ success: false, error: "Password must contain at least one number." });
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(nPass)) {
+        return res.status(400).json({ success: false, error: "Password must contain at least one special character." });
+      }
+      if (nPass === cPass) {
+        return res.status(400).json({ success: false, error: "New password cannot be the same as current password." });
+      }
+
+      const newHash = hashPassword(nPass);
+      updateStoredHash(newHash);
+
+      return res.json({ success: true, message: "Password updated successfully." });
+    } catch (err: any) {
+      console.error("[AdminAuth] Change password error:", err);
+      return res.status(500).json({ success: false, error: "An internal server error occurred." });
+    }
+  });
+
+  app.post("/api/admin/verify-session", (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = req.body?.token || (authHeader ? authHeader.replace("Bearer ", "") : "");
+    const isValid = verifySessionToken(token);
+    return res.json({ valid: isValid });
+  });
+
+  app.post("/api/admin/logout", (req, res) => {
+    const { token } = req.body;
+    if (token) invalidateSessionToken(token);
+    return res.json({ success: true });
+  });
 
   // WebAuthn state storage (in-memory for this stateless demo)
   const userChallenges: { [userId: string]: string } = {};

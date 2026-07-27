@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Transaction } from '../../types';
+import ExportModal from '../../components/ExportModal';
 
 export default function AdminLedger() {
   const { transactions, addReceivedMoney, addSentMoney, deleteTransaction, updateTransaction } = useStore();
@@ -13,6 +14,7 @@ export default function AdminLedger() {
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Transaction | null>(null);
 
   // Form states for Add / Edit
@@ -199,10 +201,20 @@ export default function AdminLedger() {
             </select>
           </div>
 
+          {/* Export Entries Button */}
+          <button 
+            onClick={() => setShowExportModal(true)}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all border border-white/10 hover:border-white/20 shrink-0 min-h-[44px]"
+            title="Export Entries as Excel or PDF"
+          >
+            <Download size={18} className="text-emerald-400" />
+            <span>Export Entries</span>
+          </button>
+
           {/* Add Entry Button */}
           <button 
             onClick={openAddModal}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0 min-h-[44px]"
           >
             <Plus size={18} />
             <span>Add Entry</span>
@@ -527,6 +539,15 @@ export default function AdminLedger() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Export Entries Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        reportType="entries"
+        title="Export SmartLedger Entries Report"
+        records={completedEntriesOnly}
+      />
     </div>
   );
 }

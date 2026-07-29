@@ -380,7 +380,7 @@ async function startServer() {
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(`[WebAuthn] Registration verification error for userId: ${userId}:`, error);
+      console.error(`[WebAuthn] Registration verification error for userId: ${req.body.userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -404,7 +404,7 @@ async function startServer() {
       userChallenges[userId] = options.challenge;
       res.json(options);
     } catch (error: any) {
-      console.error(`[WebAuthn] Authentication options generation error for userId: ${userId}:`, error);
+      console.error(`[WebAuthn] Authentication options generation error for userId: ${req.body.userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -441,7 +441,7 @@ async function startServer() {
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(`[WebAuthn] Authentication verification error for userId: ${userId}:`, error);
+      console.error(`[WebAuthn] Authentication verification error for userId: ${req.body.userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });

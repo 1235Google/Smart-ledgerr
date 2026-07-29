@@ -226,7 +226,7 @@ export default function Profile() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-900 to-black p-[1px] shadow-lg">
                     <div className="w-full h-full bg-slate-950 rounded-[11px] sm:rounded-[15px] flex items-center justify-center">
-                      <Sparkles size={16} sm:size={20} className="text-cyan-400" />
+                      <Sparkles className="w-5 h-5 text-cyan-400" />
                     </div>
                   </div>
                   <div>
@@ -237,7 +237,7 @@ export default function Profile() {
 
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-1 sm:px-4 sm:py-1.5 rounded-full bg-gradient-to-r from-slate-900 to-slate-800 border border-amber-500/30 text-amber-300 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.15)] flex items-center gap-1">
-                    <Star size={8} sm:size={10} className="fill-amber-300" /> Diamond Tier
+                    <Star className="w-2 h-2 sm:w-3 sm:h-3 fill-amber-300" /> Diamond Tier
                   </span>
                 </div>
               </div>
@@ -252,11 +252,11 @@ export default function Profile() {
                     {safeProfile.profilePhoto ? (
                       <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover" />
                     ) : (
-                      <User size={32} sm:size={40} className="text-slate-500" />
+                      <User className="w-8 h-8 sm:w-10 sm:h-10 text-slate-500" />
                     )}
                     {/* Security Verification Indicator */}
-                    <div className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 bg-emerald-500 rounded-full p-0.5 sm:p-1 border border-black">
-                      <BadgeCheck size={8} sm:size={10} className="text-white" />
+                    <div className="absolute bottom-2 right-2 bg-emerald-500 rounded-full p-1 border border-black">
+                      <BadgeCheck className="w-2.5 h-2.5 text-white" />
                     </div>
                   </div>
                 </div>
@@ -289,8 +289,8 @@ export default function Profile() {
                   { label: 'Trust Score', value: '98/100', icon: ShieldCheck },
                 ].map((item, i) => (
                   <div key={i} className="flex flex-col items-center gap-0.5 sm:gap-1">
-                    <div className="text-[8px] sm:text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-0.5 sm:gap-1">
-                      <item.icon size={8} sm:size={10} /> {item.label}
+                    <div className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                      <item.icon size={10} /> {item.label}
                     </div>
                     <div className="text-[10px] sm:text-xs font-mono font-bold text-slate-200 truncate max-w-full">
                       {item.value}

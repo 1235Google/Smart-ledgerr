@@ -1,7 +1,10 @@
 {
   "name": "Remix: Smart Ledger",
   "description": "A smart financial ledger with AI assistant to track balances, pending payments, and money received.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "publickey-credentials-create",
+    "publickey-credentials-get"
+  ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

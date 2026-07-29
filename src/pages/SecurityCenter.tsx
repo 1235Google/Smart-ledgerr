@@ -4,7 +4,7 @@ import { Shield, Smartphone, Lock, Fingerprint, ScanFace } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function SecurityCenter() {
-  const { securitySettings, updateSecuritySettings } = useStore();
+  const { securitySettings, updateSecuritySettings, lockApp } = useStore();
 
   return (
     <div className="space-y-8 pb-20 max-w-7xl mx-auto">

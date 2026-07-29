@@ -11,6 +11,18 @@ export default function BiometricSettings() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Clear error/success messages after 4 seconds
+    if (errorMsg || successMsg) {
+      const timer = setTimeout(() => {
+        setErrorMsg(null);
+        setSuccessMsg(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMsg, successMsg]);
 
   useEffect(() => {
     // Check if WebAuthn is supported
@@ -26,8 +38,14 @@ export default function BiometricSettings() {
   }, []);
 
   const handleRegister = async () => {
+    if (!window.isSecureContext) {
+      setErrorMsg("Passkeys require HTTPS or localhost.");
+      return;
+    }
+    
     setIsRegistering(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
     try {
       const userId = "user123"; // For local demo purposes
       
@@ -48,7 +66,9 @@ export default function BiometricSettings() {
       } catch (error: any) {
         console.error("StartRegistration error:", error);
         if (error.name === 'NotAllowedError') {
-          throw new Error('Registration cancelled');
+          // User cancelled, just exit gracefully
+          setIsRegistering(false);
+          return;
         }
         throw error;
       }
@@ -78,6 +98,7 @@ export default function BiometricSettings() {
           registeredDevices: [...securitySettings.registeredDevices, newDevice],
           biometricEnabled: true // auto-enable
         });
+        setSuccessMsg("Device successfully registered!");
       } else {
         throw new Error('Verification failed on server');
       }
@@ -228,6 +249,13 @@ export default function BiometricSettings() {
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm">
               <XCircle size={16} />
               <p>{errorMsg}</p>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2 text-emerald-400 text-sm">
+              <CheckCircle2 size={16} />
+              <p>{successMsg}</p>
             </div>
           )}
 

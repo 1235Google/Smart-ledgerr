@@ -34,6 +34,7 @@ export default function BiometricSettings() {
       const resp = await fetch('/api/webauthn/generate-registration-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ userId, userName: "User" }),
       });
       
@@ -43,8 +44,9 @@ export default function BiometricSettings() {
       
       let attResp;
       try {
-        attResp = await startRegistration({ optionsJSON: options });
+        attResp = await startRegistration(options);
       } catch (error: any) {
+        console.error("StartRegistration error:", error);
         if (error.name === 'NotAllowedError') {
           throw new Error('Registration cancelled');
         }
@@ -54,6 +56,7 @@ export default function BiometricSettings() {
       const verificationResp = await fetch('/api/webauthn/verify-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           response: attResp,
@@ -95,6 +98,7 @@ export default function BiometricSettings() {
       const resp = await fetch('/api/webauthn/generate-authentication-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           allowCredentials: securitySettings.registeredDevices.map(d => ({
@@ -122,6 +126,7 @@ export default function BiometricSettings() {
       const verificationResp = await fetch('/api/webauthn/verify-authentication', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           response: asseResp,

@@ -20,6 +20,7 @@ import ImportExport from './pages/ImportExport';
 import Calculator from './pages/Calculator';
 import TimelineReplay from './pages/TimelineReplay';
 import SecurityWrapper from './components/SecurityWrapper';
+import SecurityCenter from './pages/SecurityCenter';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -107,6 +108,7 @@ function AppRoutes() {
         <Route path="import-export" element={<ImportExport />} />
         <Route path="reports" element={<MonthlyReports />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="security" element={<SecurityCenter />} />
         <Route path="profile" element={<Profile />} />
       </Route>
     </Routes>

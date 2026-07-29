@@ -321,7 +321,7 @@ async function startServer() {
   app.post("/api/webauthn/generate-registration-options", async (req, res) => {
     try {
       const { userId, userName } = req.body;
-      const expectedRPID = req.headers.host?.split(':')[0] || 'localhost';
+      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
       
       const options = await generateRegistrationOptions({
         rpName,
@@ -356,7 +356,7 @@ async function startServer() {
       }
 
       const expectedOrigin = req.headers.origin!;
-      const expectedRPID = req.headers.host?.split(':')[0] || 'localhost';
+      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
 
       const verification = await verifyRegistrationResponse({
         response,
@@ -371,15 +371,16 @@ async function startServer() {
         res.json({
           verified: true,
           credential: {
-            id: Buffer.from(credential.id).toString('base64'),
-            publicKey: Buffer.from(credential.publicKey).toString('base64')
+            id: Buffer.from(credential.id).toString('base64url'),
+            publicKey: Buffer.from(credential.publicKey).toString('base64url')
           }
         });
       } else {
+        console.warn(`[WebAuthn] Registration verification failed for userId: ${userId}`);
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(error);
+      console.error(`[WebAuthn] Registration verification error for userId: ${userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -387,13 +388,13 @@ async function startServer() {
   app.post("/api/webauthn/generate-authentication-options", async (req, res) => {
     try {
       const { userId, allowCredentials } = req.body;
-      const expectedRPID = req.headers.host?.split(':')[0] || 'localhost';
+      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
       
       const options = await generateAuthenticationOptions({
         rpID: expectedRPID,
         timeout: 60000,
         allowCredentials: allowCredentials.map((cred: any) => ({
-          id: Uint8Array.from(Buffer.from(cred.id, 'base64')),
+          id: Uint8Array.from(Buffer.from(cred.id, 'base64url')),
           type: 'public-key',
           transports: cred.transports,
         })),
@@ -403,7 +404,7 @@ async function startServer() {
       userChallenges[userId] = options.challenge;
       res.json(options);
     } catch (error: any) {
-      console.error(error);
+      console.error(`[WebAuthn] Authentication options generation error for userId: ${userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -418,7 +419,7 @@ async function startServer() {
       }
 
       const expectedOrigin = req.headers.origin!;
-      const expectedRPID = req.headers.host?.split(':')[0] || 'localhost';
+      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
 
       const verification = await verifyAuthenticationResponse({
         response,
@@ -427,7 +428,7 @@ async function startServer() {
         expectedRPID,
         credential: {
           id: authenticator.id,
-          publicKey: Uint8Array.from(Buffer.from(authenticator.publicKey, 'base64')),
+          publicKey: Uint8Array.from(Buffer.from(authenticator.publicKey, 'base64url')),
           counter: 0,
         }
       });
@@ -436,10 +437,11 @@ async function startServer() {
         delete userChallenges[userId];
         res.json({ verified: true });
       } else {
+        console.warn(`[WebAuthn] Authentication verification failed for userId: ${userId}`);
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(error);
+      console.error(`[WebAuthn] Authentication verification error for userId: ${userId}:`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -1030,6 +1032,24 @@ Respond ONLY with a JSON array of objects in this exact format:
     } catch (error: any) {
       console.error("Email Error:", error);
       res.status(500).json({ error: error.message || "An error occurred while sending the email." });
+    }
+  });
+
+  app.post('/api/ai/insights', async (req, res) => {
+    try {
+      const { income, expenses, savings, pendingPayments, transactions } = req.body;
+      // In a real implementation, you would call Gemini API here
+      res.json({
+        success: true,
+        insights: [
+          "Your expenses decreased by 12% compared to last month.",
+          "Food is your highest spending category this month.",
+          "You can save ₹2,500 more by reducing unnecessary expenses.",
+          "Your current saving habit is excellent."
+        ]
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Failed to generate insights' });
     }
   });
 

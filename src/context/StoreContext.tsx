@@ -49,6 +49,17 @@ interface StoreContextType extends AppState {
   addGullakEntry: (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateGullakEntry: (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteGullakEntry: (id: string) => void;
+  addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => void;
+  updateSavingsGoal: (id: string, goal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => void;
+  deleteSavingsGoal: (id: string) => void;
+  addSecurityLog: (log: Omit<SecurityLog, 'id'>) => void;
+  addAutomationRule: (rule: Omit<AutomationRule, 'id'>) => void;
+  updateAutomationRule: (id: string, rule: Partial<Omit<AutomationRule, 'id'>>) => void;
+  deleteAutomationRule: (id: string) => void;
+  addInvestment: (investment: Omit<Investment, 'id'>) => void;
+  updateInvestment: (id: string, investment: Partial<Omit<Investment, 'id'>>) => void;
+  deleteInvestment: (id: string) => void;
+  updateFinanceHabit: (habit: FinanceHabit) => void;
   updateGullakSettings: (settings: Partial<GullakSettings>) => void;
   resetData: () => void;
   importData: (data: AppState) => void;
@@ -64,6 +75,9 @@ interface StoreContextType extends AppState {
   adminLogin: (pass: string, email?: string) => Promise<{ success: boolean; error?: string }>;
   adminLogout: () => void;
   updateAdminPassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
+  isLocked: boolean;
+  unlockApp: (pin: string) => boolean;
+  lockApp: () => void;
 }
 
 const defaultState: AppState = {
@@ -72,6 +86,11 @@ const defaultState: AppState = {
   customers: [],
   transactions: [],
   gullakEntries: [],
+  savingsGoals: [],
+  securityLogs: [],
+  automationRules: [],
+  investments: [],
+  financeHabits: [],
   gullakSettings: {
     monthlyGoal: 5000,
   },
@@ -141,6 +160,11 @@ export const emptyState: AppState = {
   customers: [],
   transactions: [],
   gullakEntries: [],
+  savingsGoals: [],
+  securityLogs: [],
+  automationRules: [],
+  investments: [],
+  financeHabits: [],
   gullakSettings: {
     monthlyGoal: 0,
   },
@@ -212,10 +236,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
+  const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('smartledger-admin-auth') === 'true';
   });
+
+  useEffect(() => {
+    if (isInitialized && state.securitySettings.pinEnabled) {
+      setIsLocked(true);
+    }
+  }, [isInitialized, state.securitySettings.pinEnabled]);
+
+  const unlockApp = (pin: string) => {
+    // Simple hashing simulation
+    const hashedPin = CryptoJS.SHA256(pin).toString();
+    if (state.securitySettings.pin === hashedPin) {
+      setIsLocked(false);
+      return true;
+    }
+    return false;
+  };
+
+  const lockApp = () => {
+    if (state.securitySettings.pinEnabled) {
+      setIsLocked(true);
+    }
+  };
 
   useEffect(() => {
     const token = sessionStorage.getItem('smartledger-admin-session');
@@ -677,6 +724,73 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const addSavingsGoal = (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => {
+    const newGoal: SavingsGoal = {
+      ...goal,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    setState(prev => ({ ...prev, savingsGoals: [...(prev.savingsGoals || []), newGoal] }));
+  };
+
+  const updateSavingsGoal = (id: string, goal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => {
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || []).map(g => g.id === id ? { ...g, ...goal } : g)
+    }));
+  };
+
+  const deleteSavingsGoal = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || []).filter(g => g.id !== id)
+    }));
+  };
+
+  const addSecurityLog = (log: Omit<SecurityLog, 'id'>) => {
+    const newLog: SecurityLog = { ...log, id: crypto.randomUUID() };
+    setState(prev => ({ ...prev, securityLogs: [newLog, ...(prev.securityLogs || [])] }));
+  };
+
+  const addAutomationRule = (rule: Omit<AutomationRule, 'id'>) => {
+    const newRule: AutomationRule = { ...rule, id: crypto.randomUUID() };
+    setState(prev => ({ ...prev, automationRules: [...(prev.automationRules || []), newRule] }));
+  };
+
+  const updateAutomationRule = (id: string, rule: Partial<Omit<AutomationRule, 'id'>>) => {
+    setState(prev => ({
+        ...prev,
+        automationRules: (prev.automationRules || []).map(r => r.id === id ? { ...r, ...rule } : r)
+    }));
+  };
+
+  const deleteAutomationRule = (id: string) => {
+    setState(prev => ({ ...prev, automationRules: (prev.automationRules || []).filter(r => r.id !== id) }));
+  };
+
+  const addInvestment = (investment: Omit<Investment, 'id'>) => {
+    const newInv: Investment = { ...investment, id: crypto.randomUUID() };
+    setState(prev => ({ ...prev, investments: [...(prev.investments || []), newInv] }));
+  };
+
+  const updateInvestment = (id: string, investment: Partial<Omit<Investment, 'id'>>) => {
+      setState(prev => ({
+          ...prev,
+          investments: (prev.investments || []).map(i => i.id === id ? { ...i, ...investment } : i)
+      }));
+  };
+
+  const deleteInvestment = (id: string) => {
+      setState(prev => ({ ...prev, investments: (prev.investments || []).filter(i => i.id !== id) }));
+  };
+
+  const updateFinanceHabit = (habit: FinanceHabit) => {
+      setState(prev => ({
+          ...prev,
+          financeHabits: (prev.financeHabits || []).map(h => h.id === habit.id ? habit : h)
+      }));
+  };
+
   const updateGullakSettings = (settings: Partial<GullakSettings>) => {
     setState(prev => ({
       ...prev,
@@ -766,7 +880,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addGullakEntry,
       updateGullakEntry,
       deleteGullakEntry,
+      addSavingsGoal,
+      updateSavingsGoal,
+      deleteSavingsGoal,
       updateGullakSettings,
+      addSecurityLog,
+      addAutomationRule,
+      updateAutomationRule,
+      deleteAutomationRule,
+      addInvestment,
+      updateInvestment,
+      deleteInvestment,
+      updateFinanceHabit,
       updateUserProfile,
       resetData,
       importData,
@@ -780,7 +905,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isAdminAuthenticated,
       adminLogin,
       adminLogout,
-      updateAdminPassword
+      updateAdminPassword,
+      isLocked,
+      unlockApp,
+      lockApp
     }}>
       {children}
     </StoreContext.Provider>

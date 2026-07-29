@@ -11,6 +11,8 @@ interface LockScreenProps {
 
 export default function LockScreen({ onUnlock }: LockScreenProps) {
   const { securitySettings, updateSecuritySettings } = useStore();
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [error, setError] = useState(false);
   const [showBiometric, setShowBiometric] = useState(securitySettings.biometricEnabled);
@@ -19,11 +21,34 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   
-  const [showPin, setShowPin] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState(0);
-
   const pinLength = securitySettings.pin?.length || 4;
+  
+  const [isCreatingPin, setIsCreatingPin] = useState(securitySettings.pinEnabled && !securitySettings.pin);
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleCreatePin = () => {
+    if (pinInput.length !== pinLength) return;
+    
+    if (!showConfirm) {
+        setShowConfirm(true);
+        setPinInput('');
+    } else {
+        if (pinInput === confirmPinInput) {
+            const hashedPin = CryptoJS.SHA256(pinInput).toString();
+            updateSecuritySettings({ pin: hashedPin, pinEnabled: true });
+            onUnlock();
+        } else {
+            setError(true);
+            setPinInput('');
+            setConfirmPinInput('');
+            setShowConfirm(false);
+            setErrorMsg('PINs do not match');
+        }
+    }
+  };
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,7 +75,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         try {
           const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
           setIsBiometricSupported(available);
-          if (available && showBiometric && !isAuthenticating && !biometricError) {
+          // Only auto-trigger if we have devices and aren't already authenticating/errored
+          if (available && showBiometric && !isAuthenticating && !biometricError && securitySettings.registeredDevices?.length > 0) {
             handleBiometricAuth();
           }
         } catch (e) {
@@ -61,7 +87,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       }
     };
     checkSupport();
-  }, [showBiometric]);
+  }, [showBiometric, isAuthenticating, biometricError]);
 
   const handleBiometricAuth = async () => {
     if (isAuthenticating || lockoutTime > 0) return;
@@ -79,6 +105,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       const resp = await fetch('/api/webauthn/generate-authentication-options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           allowCredentials: securitySettings.registeredDevices.map(d => ({
@@ -94,8 +121,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
       let asseResp;
       try {
-        asseResp = await startAuthentication({ optionsJSON: options });
+        asseResp = await startAuthentication(options);
       } catch (err: any) {
+        console.error("StartAuthentication error:", err);
         throw new Error("Authentication cancelled");
       }
 
@@ -105,6 +133,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       const verifyResp = await fetch('/api/webauthn/verify-authentication', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userId,
           response: asseResp,
@@ -168,10 +197,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
     if (securitySettings.pinEnabled && pinInput === securitySettings.pin) {
       setFailedAttempts(0);
-      onUnlock();
+      setIsUnlocking(true);
+      setTimeout(onUnlock, 800);
     } else if (!securitySettings.pinEnabled && pinInput === '0000') {
       setFailedAttempts(0);
-      onUnlock();
+      setIsUnlocking(true);
+      setTimeout(onUnlock, 800);
     } else {
       const newAttempts = failedAttempts + 1;
       setFailedAttempts(newAttempts);
@@ -250,9 +281,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   return (
     <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 1 }}
+      animate={{ scale: isUnlocking ? 1.2 : 1, opacity: isUnlocking ? 0 : 1 }}
+      transition={{ duration: 0.8, ease: "easeInOut" }}
       className="fixed inset-0 z-50 bg-[#0a0b10] flex flex-col items-center justify-center p-6"
     >
       <div className="flex flex-col items-center max-w-sm w-full bg-white/5 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl backdrop-blur-xl">

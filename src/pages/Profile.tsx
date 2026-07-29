@@ -207,146 +207,96 @@ export default function Profile() {
             className="relative w-full max-w-xl group"
           >
             {/* Ambient Backlight Glow */}
-            <div className="absolute -inset-1.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-emerald-500 rounded-[30px] blur-2xl opacity-40 group-hover:opacity-70 transition duration-700 animate-pulse" />
+            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/30 via-purple-500/30 to-cyan-500/30 rounded-[32px] blur-2xl opacity-50 group-hover:opacity-80 transition duration-700" />
 
-            {/* The Ultra-Luxury Credit/ATM Card */}
+            {/* The Ultra-Luxury Fintech Card */}
             <div 
               style={{ backdropFilter: `blur(${glassIntensity}px)` }}
-              className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-900/95 via-indigo-950/85 to-black/95 border border-white/20 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] p-6 sm:p-8 transition-all duration-500 group-hover:border-indigo-400/50 group-hover:shadow-[0_25px_70px_-10px_rgba(99,102,241,0.3)]"
+              className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] bg-[#0A0B10] border border-white/10 shadow-2xl p-4 sm:p-6 md:p-8 transition-all duration-500"
             >
+              {/* Inner Glow Border Highlight */}
+              <div className="absolute inset-0 rounded-[20px] sm:rounded-[24px] border border-white/10 pointer-events-none" />
+              <div className="absolute inset-0 rounded-[20px] sm:rounded-[24px] border border-white/[0.05] shadow-[inset_0_0_20px_rgba(255,255,255,0.05)] pointer-events-none" />
               
-              {/* Metallic Gloss/Sheen Overlay */}
-              <div className="absolute -top-32 -left-32 w-96 h-96 bg-gradient-to-br from-white/10 via-white/5 to-transparent rotate-45 pointer-events-none group-hover:translate-x-16 transition-transform duration-1000" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-500/15 via-purple-500/10 to-transparent pointer-events-none" />
+              {/* Holographic Shine Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-30 pointer-events-none" />
 
-              {/* Card Header: Brand Logo, Contactless Wave & Diamond Tier Badge */}
-              <div className="flex items-center justify-between mb-6 relative z-10">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 via-indigo-500 to-purple-600 p-[1px] shadow-lg">
-                    <div className="w-full h-full bg-slate-950 rounded-[11px] flex items-center justify-center">
-                      <Sparkles size={16} className="text-amber-400 fill-amber-400" />
+              {/* Card Header: Brand Logo & Premium Tier Badge */}
+              <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-900 to-black p-[1px] shadow-lg">
+                    <div className="w-full h-full bg-slate-950 rounded-[11px] sm:rounded-[15px] flex items-center justify-center">
+                      <Sparkles size={16} sm:size={20} className="text-cyan-400" />
                     </div>
                   </div>
-                  <span className="font-extrabold tracking-widest text-xs text-white uppercase font-mono">
-                    SMARTLEDGER<span className="text-indigo-400">CARD</span>
-                  </span>
+                  <div>
+                    <div className="font-bold tracking-widest text-[10px] sm:text-xs text-white uppercase font-mono">SmartLedger</div>
+                    <div className="text-[8px] sm:text-[10px] text-cyan-400 font-medium uppercase tracking-widest">Premium Member</div>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  {/* Contactless Signal Symbol */}
-                  <div className="text-white/40 group-hover:text-white/80 transition-colors" title="Contactless Enabled">
-                    <svg className="w-6 h-6 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18.5a6.5 6.5 0 0 0 0-13M15.5 16a3.5 3.5 0 0 0 0-7M8.5 21a10 10 0 0 0 0-18" />
-                    </svg>
-                  </div>
-
-                  <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.25)]">
-                    Diamond Tier
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 sm:px-4 sm:py-1.5 rounded-full bg-gradient-to-r from-slate-900 to-slate-800 border border-amber-500/30 text-amber-300 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.15)] flex items-center gap-1">
+                    <Star size={8} sm:size={10} className="fill-amber-300" /> Diamond Tier
                   </span>
                 </div>
               </div>
 
-              {/* Center Body: Profile Avatar, Details, Level & XP */}
-              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10 mb-6">
-                
-                {/* Profile Picture with Golden Metallic Ring & Upload Click */}
-                <div 
-                  className="relative group/avatar cursor-pointer shrink-0" 
-                  onClick={() => fileInputRef.current?.click()} 
-                  title="Click to update profile photo"
-                >
-                  <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-400 via-indigo-500 to-purple-500 rounded-full blur-sm opacity-80 group-hover/avatar:opacity-100 transition duration-300" />
+              {/* Profile Identity Area: Avatar as Digital Chip */}
+              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4 sm:gap-6 relative z-10 mb-6 sm:mb-8">
+                {/* Avatar Chip */}
+                <div className="relative group/avatar shrink-0">
+                  <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-500 rounded-2xl sm:rounded-3xl blur opacity-50 group-hover/avatar:opacity-80 transition duration-300" />
                   
-                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-2 border-amber-400/80 bg-slate-900 shadow-2xl">
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner flex items-center justify-center">
                     {safeProfile.profilePhoto ? (
-                      <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover transition duration-500 group-hover/avatar:scale-105" />
+                      <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500"><User size={40} /></div>
+                      <User size={32} sm:size={40} className="text-slate-500" />
                     )}
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition duration-200">
-                      <Camera size={24} className="text-white" />
+                    {/* Security Verification Indicator */}
+                    <div className="absolute bottom-1 right-1 sm:bottom-2 sm:right-2 bg-emerald-500 rounded-full p-0.5 sm:p-1 border border-black">
+                      <BadgeCheck size={8} sm:size={10} className="text-white" />
                     </div>
                   </div>
-                  <input type="file" ref={fileInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
-
-                  {/* Golden Verification Badge */}
-                  <div className="absolute top-0 right-0 w-7 h-7 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full border-2 border-slate-950 flex items-center justify-center z-20 shadow-lg" title="Golden Verified Member">
-                    <BadgeCheck size={14} className="text-slate-950 stroke-[3]" />
-                  </div>
-
-                  {/* Active Online Indicator */}
-                  <div className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-slate-950 z-20 animate-pulse" title="Online" />
                 </div>
 
-                {/* Info Column */}
-                <div className="flex-1 text-center sm:text-left min-w-0 w-full">
-                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow-md truncate mb-1">
+                {/* Member Info */}
+                <div className="flex-1 text-center sm:text-left min-w-0">
+                  <h1 className="text-xl sm:text-2xl sm:text-3xl font-extrabold text-white truncate mb-0.5 sm:mb-1">
                     {safeProfile.fullName}
                   </h1>
-                  
-                  <p className="text-slate-300 text-xs sm:text-sm font-medium mb-3 flex items-center justify-center sm:justify-start gap-2 truncate">
-                    <span className="text-indigo-300 font-mono font-semibold">{safeProfile.username}</span>
-                    <span className="text-slate-500">•</span>
-                    <span className="text-emerald-400 truncate">{safeProfile.businessName}</span>
-                  </p>
+                  <p className="text-slate-400 text-[10px] sm:text-xs font-mono mb-3 sm:mb-4">{safeProfile.username}</p>
 
-                  {/* Level & XP Progress */}
-                  <div className="bg-slate-950/70 border border-white/10 rounded-xl p-2.5 backdrop-blur-md">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1.5">
-                      <span className="flex items-center gap-1 text-amber-300">
-                        <Sparkles size={12} className="text-amber-400 fill-amber-400" />
-                        Level 8 Enterprise Trader
-                      </span>
-                      <span className="text-emerald-400 font-mono">8,450 / 10,000 XP</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-amber-400 via-indigo-500 to-emerald-400 rounded-full w-[84.5%]" />
+                  {/* XP Progress Bar */}
+                  <div className="w-full bg-black/40 rounded-full h-1.5 sm:h-2 p-[1px] border border-white/5">
+                    <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-full w-[84.5%] relative">
+                      <div className="absolute inset-0 bg-white/20 blur-sm rounded-full" />
                     </div>
                   </div>
+                  <div className="flex justify-between text-[8px] sm:text-[10px] text-slate-500 mt-1 sm:mt-2 font-mono">
+                    <span>LEVEL 8</span>
+                    <span>8,450 / 10,000 XP</span>
+                  </div>
                 </div>
-
               </div>
 
-              {/* Card Footer: EMV Chip + Member ID + Member Since + Trust Score */}
-              <div className="pt-4 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left relative z-10 items-center">
-                
-                {/* EMV Gold Chip */}
-                <div className="flex items-center justify-center sm:justify-start gap-2">
-                  <div className="w-10 h-7 rounded-md bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-600 p-[1px] shadow-inner relative overflow-hidden flex items-center justify-center">
-                    <div className="w-full h-full border border-amber-600/40 rounded-[5px] grid grid-cols-2 gap-0.5 p-0.5">
-                      <div className="bg-amber-300/40 rounded-[2px]" />
-                      <div className="bg-amber-300/40 rounded-[2px]" />
-                      <div className="bg-amber-300/40 rounded-[2px]" />
-                      <div className="bg-amber-300/40 rounded-[2px]" />
+              {/* Card Footer: Detailed Info */}
+              <div className="pt-4 sm:pt-6 border-t border-white/10 grid grid-cols-3 gap-2 sm:gap-4 text-center relative z-10">
+                {[
+                  { label: 'Member ID', value: 'SLX-8942-8819', icon: Lock },
+                  { label: 'Member Since', value: 'JAN 2024', icon: Calendar },
+                  { label: 'Trust Score', value: '98/100', icon: ShieldCheck },
+                ].map((item, i) => (
+                  <div key={i} className="flex flex-col items-center gap-0.5 sm:gap-1">
+                    <div className="text-[8px] sm:text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-0.5 sm:gap-1">
+                      <item.icon size={8} sm:size={10} /> {item.label}
+                    </div>
+                    <div className="text-[10px] sm:text-xs font-mono font-bold text-slate-200 truncate max-w-full">
+                      {item.value}
                     </div>
                   </div>
-                </div>
-
-                {/* SmartLedger Member ID */}
-                <div>
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Member ID</div>
-                  <div className="font-mono font-bold text-white text-xs sm:text-sm tracking-wider">
-                    SLX-8942-8819
-                  </div>
-                </div>
-
-                {/* Member Since Date */}
-                <div>
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Member Since</div>
-                  <div className="font-mono font-bold text-slate-200 text-xs sm:text-sm">
-                    {safeProfile.memberSince}
-                  </div>
-                </div>
-
-                {/* Trust Score */}
-                <div className="text-center sm:text-right">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Trust Score</div>
-                  <div className="inline-flex items-center gap-1 font-bold text-emerald-400 text-xs sm:text-sm">
-                    <ShieldCheck size={14} className="text-emerald-400" />
-                    <span>98/100</span>
-                  </div>
-                </div>
-
+                ))}
               </div>
 
             </div>

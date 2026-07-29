@@ -154,6 +154,49 @@ export interface PosterTemplate {
   placeholders: PosterPlaceholder[];
 }
 
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  savedAmount: number;
+  deadline: string;
+  createdAt: string;
+}
+
+export interface SecurityLog {
+  id: string;
+  eventType: 'login' | 'logout' | 'device_added' | 'device_removed' | 'password_change' | 'pin_change';
+  deviceInfo: string;
+  location: string;
+  timestamp: string;
+}
+
+export interface AutomationRule {
+  id: string;
+  enabled: boolean;
+  trigger: 'salary_received' | 'food_limit_exceeded' | 'payment_due';
+  triggerValue: number;
+  action: 'move_to_savings' | 'send_warning' | 'send_reminder';
+  actionTarget: string;
+}
+
+export interface Investment {
+  id: string;
+  name: string;
+  type: 'stock' | 'mutual_fund' | 'fixed_deposit' | 'gold' | 'other';
+  currentValue: number;
+  investedAmount: number;
+  growthPercentage: number;
+}
+
+export interface FinanceHabit {
+  id: string;
+  name: string;
+  streak: number;
+  lastTrackedDate: string;
+  totalTrackedDays: number;
+}
+
 export interface GullakEntry {
   id: string;
   personName: string;
@@ -213,6 +256,11 @@ export interface AppState {
   customers: Customer[];
   transactions: Transaction[];
   gullakEntries: GullakEntry[];
+  savingsGoals: SavingsGoal[];
+  securityLogs: SecurityLog[];
+  automationRules: AutomationRule[];
+  investments: Investment[];
+  financeHabits: FinanceHabit[];
   gullakSettings: GullakSettings;
   securitySettings: SecuritySettings;
   emailSettings: EmailSettings;

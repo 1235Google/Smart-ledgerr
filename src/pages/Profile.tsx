@@ -63,7 +63,6 @@ export default function Profile() {
     businessRating: 4.9,
     verifiedEmail: true,
     verifiedPhone: true,
-    googleConnected: true,
     lastLogin: 'Today, 10:42 AM from New Delhi',
     activeDevice: 'Chrome on macOS (Secure Session)'
   };

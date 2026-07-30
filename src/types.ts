@@ -303,7 +303,6 @@ export interface UserProfile {
   
   verifiedEmail: boolean;
   verifiedPhone: boolean;
-  googleConnected: boolean;
   lastLogin: string;
   activeDevice: string;
 }

@@ -154,7 +154,6 @@ export const defaultState: AppState = {
     businessLogo: '',
     verifiedEmail: false,
     verifiedPhone: false,
-    googleConnected: false,
     lastLogin: '',
     activeDevice: ''
   },

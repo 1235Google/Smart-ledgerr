@@ -3,6 +3,9 @@ import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, Security
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
+import { auth, db } from '../lib/firebase';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -78,83 +81,12 @@ interface StoreContextType extends AppState {
   isLocked: boolean;
   unlockApp: (pin: string) => boolean;
   lockApp: () => void;
+  currentUser: User | null;
+  isAuthenticated: boolean;
+  logout: () => Promise<void>;
 }
 
-const defaultState: AppState = {
-  isSetupComplete: true, // Auto complete setup for demo user
-  startingBalance: 14000,
-  customers: [],
-  transactions: [],
-  gullakEntries: [],
-  savingsGoals: [],
-  securityLogs: [],
-  automationRules: [],
-  investments: [],
-  financeHabits: [],
-  gullakSettings: {
-    monthlyGoal: 5000,
-  },
-  securitySettings: {
-    pinEnabled: false,
-    pin: null,
-    biometricEnabled: false,
-    faceUnlockEnabled: false,
-    autoLockTime: 2,
-    registeredDevices: [],
-  },
-  emailSettings: {
-    enabled: false,
-    emailAddress: '',
-    lastReportSent: null,
-    nextScheduledReport: null,
-  },
-  emailHistory: [],
-  generalSettings: {
-    timezone: 'Asia/Kolkata',
-  },
-  aiRecognitionSettings: {
-    enabled: false,
-    frequency: 'manual',
-    enablePhoto: true,
-    enableAiMessage: true,
-    whatsappDelivery: 'download_only',
-    theme: 'luxury_gold',
-    orientation: 'portrait'
-  },
-  aiRecognitionHistory: [],
-  posterTemplates: [],
-  unlockedAchievements: [],
-  userProfile: {
-    fullName: 'Rahul Sharma',
-    username: 'rahul_smartledger',
-    email: 'rahul.sharma@fintech.io',
-    mobile: '+91 98765 43210',
-    dob: '1992-06-15',
-    address: '42, Connaught Place',
-    city: 'New Delhi',
-    state: 'Delhi',
-    country: 'India',
-    language: 'English (IN)',
-    memberSince: '2024-01-10',
-    profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    businessName: 'Sharma Digital Enterprises',
-    businessCategory: 'Fintech & Retail',
-    gstNumber: '07AABCS1429B1Z8',
-    upiId: 'sharmadigital@okaxis',
-    businessAddress: '108, Cyber City, Phase 2',
-    website: 'https://sharmadigital.io',
-    businessLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-    verifiedEmail: true,
-    verifiedPhone: true,
-    googleConnected: true,
-    lastLogin: 'Today, 10:42 AM',
-    activeDevice: 'Chrome on macOS (Secure Session)'
-  },
-  reminderHistory: [],
-  customReminderTemplate: DEFAULT_REMINDER_TEMPLATE
-};
-
-export const emptyState: AppState = {
+export const defaultState: AppState = {
   isSetupComplete: true,
   startingBalance: 0,
   customers: [],
@@ -231,12 +163,61 @@ export const emptyState: AppState = {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
+import { loadStateFromCloud, syncStateToCloud } from '../lib/cloudSync';
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
   const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const prevStateRef = React.useRef<AppState>(defaultState);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setIsAuthenticated(!!user);
+      
+      if (user) {
+        setIsLoading(true);
+        const loadedState = await loadStateFromCloud(user.uid, defaultState);
+        setState(loadedState);
+        prevStateRef.current = loadedState;
+        setIsDataLoaded(true);
+        setIsLoading(false);
+      } else {
+        setState(defaultState);
+        prevStateRef.current = defaultState;
+        setIsDataLoaded(true);
+        setIsLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && currentUser && isDataLoaded) {
+      syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
+      prevStateRef.current = state;
+    }
+  }, [state, isAuthenticated, currentUser, isDataLoaded]);
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      // Clear local storage and state when logging out
+      localStorage.removeItem('smart-ledger-data');
+      setState(defaultState);
+      prevStateRef.current = defaultState;
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
+  };
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('smartledger-admin-auth') === 'true';
@@ -374,57 +355,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
 
   useEffect(() => {
-    const loadData = async () => {
-      let saved = localStorage.getItem('smart-ledger-data');
-
-      if (saved) {
-        try {
-          const bytes = CryptoJS.AES.decrypt(saved, SECRET_KEY);
-          const decryptedData = JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-          setState({ 
-            ...defaultState, 
-            ...decryptedData, 
-            userProfile: { ...defaultState.userProfile, ...(decryptedData.userProfile || {}) },
-            securitySettings: { ...defaultState.securitySettings, ...decryptedData.securitySettings }, 
-            emailSettings: { ...defaultState.emailSettings, ...decryptedData.emailSettings },
-            generalSettings: { ...defaultState.generalSettings, ...decryptedData.generalSettings },
-            aiRecognitionSettings: { ...defaultState.aiRecognitionSettings, ...decryptedData.aiRecognitionSettings }
-          });
-        } catch (e) {
-          try {
-            const parsed = JSON.parse(saved);
-            setState({ 
-              ...defaultState, 
-              ...parsed, 
-              userProfile: { ...defaultState.userProfile, ...(parsed.userProfile || {}) },
-              securitySettings: { ...defaultState.securitySettings, ...parsed.securitySettings }, 
-              emailSettings: { ...defaultState.emailSettings, ...parsed.emailSettings },
-              generalSettings: { ...defaultState.generalSettings, ...parsed.generalSettings },
-              aiRecognitionSettings: { ...defaultState.aiRecognitionSettings, ...parsed.aiRecognitionSettings }
-            });
-          } catch (e2) {
-            setState(defaultState);
-          }
-        }
-      } else {
-        setState(defaultState);
-      }
-      setIsLoading(false);
-      setIsInitialized(true);
-    };
-
-    loadData();
+    setIsInitialized(true);
   }, []);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    const saveData = async () => {
-      const encrypted = CryptoJS.AES.encrypt(JSON.stringify(state), SECRET_KEY).toString();
-      localStorage.setItem('smart-ledger-data', encrypted);
-    };
-    saveData();
-  }, [state, isInitialized]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -908,7 +840,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updateAdminPassword,
       isLocked,
       unlockApp,
-      lockApp
+      lockApp,
+      currentUser,
+      isAuthenticated,
+      logout,
     }}>
       {children}
     </StoreContext.Provider>

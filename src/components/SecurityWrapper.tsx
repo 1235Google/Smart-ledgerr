@@ -3,7 +3,7 @@ import { useStore } from '../context/StoreContext';
 import LockScreen from './LockScreen';
 
 export default function SecurityWrapper({ children }: { children: React.ReactNode }) {
-  const { securitySettings } = useStore();
+  const { securitySettings, isAuthenticated } = useStore();
   const [isLocked, setIsLocked] = useState(securitySettings.pinEnabled && !!securitySettings.pin);
   const lastActivityRef = useRef<number>(Date.now());
   const autoLockTimeRef = useRef(securitySettings.autoLockTime);
@@ -15,7 +15,7 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
   }, [securitySettings.autoLockTime]);
 
   useEffect(() => {
-    if (isLocked) return;
+    if (isLocked || !isAuthenticated) return;
 
     let rafId: number;
     const handleActivity = () => {
@@ -60,6 +60,10 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
       setIsLocked(false);
     }
   }, [securitySettings.pinEnabled, securitySettings.pin]);
+
+  if (!isAuthenticated) {
+    return <>{children}</>;
+  }
 
   if (isLocked) {
     return <LockScreen onUnlock={() => {

@@ -33,8 +33,10 @@ import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminGullak from './pages/admin/AdminGullak';
 
+import Login from './pages/Login';
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isSetupComplete, isLoading } = useStore();
+  const { isAuthenticated, isLoading } = useStore();
   
   if (isLoading) {
     return (
@@ -44,14 +46,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isSetupComplete) {
-    return <Navigate to="/setup" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
 
-function SetupRoute({ children }: { children: React.ReactNode }) {
-  const { isSetupComplete, isLoading } = useStore();
+function LoginRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useStore();
   
   if (isLoading) {
     return (
@@ -61,7 +63,7 @@ function SetupRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isSetupComplete) {
+  if (isAuthenticated) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
@@ -83,10 +85,10 @@ function AppRoutes() {
         <Route path="gullak" element={<AdminGullak />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
-      <Route path="/setup" element={
-        <SetupRoute>
-          <InitialSetup />
-        </SetupRoute>
+      <Route path="/login" element={
+        <LoginRoute>
+          <Login />
+        </LoginRoute>
       } />
       <Route path="/" element={
         <ProtectedRoute>

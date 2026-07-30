@@ -176,12 +176,12 @@ function PaymentCard({
 
       {!isPaid && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-          {/* AI Insight */}
+          {/* Insight */}
           <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex gap-3 relative overflow-hidden group/ai">
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
             <div className="text-purple-400 mt-0.5"><Brain size={18} /></div>
             <div>
-              <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">AI Insight</p>
+              <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">Insight</p>
               <p className="text-sm font-bold text-white">{probability}% Collection Chance</p>
               <p className="text-xs text-slate-400 mt-1">Expected payment within {probability > 80 ? '5' : '15'} days.</p>
             </div>
@@ -377,7 +377,7 @@ function PaymentCard({
           >
             <MessageCircle size={32} className="text-green-400 mb-3" />
             <h4 className="text-lg font-bold text-white mb-2">Send WhatsApp Reminder?</h4>
-            <p className="text-sm text-slate-300 mb-6">This will generate a personalized AI message and open WhatsApp for {formattedName}.</p>
+            <p className="text-sm text-slate-300 mb-6">This will generate a personalized message and open WhatsApp for {formattedName}.</p>
             <div className="flex gap-3">
               <button disabled={isGeneratingAiMessage} onClick={() => onConfirmWhatsApp(tx)} className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center min-w-[120px] disabled:opacity-50">
                 {isGeneratingAiMessage ? <Loader2 size={18} className="animate-spin" /> : 'Send Now'}
@@ -524,25 +524,11 @@ export default function PendingPayments() {
   const handleSendReminder = async (tx: PendingMoney) => {
     setIsGeneratingAiMessage(true);
     let message = '';
-    try {
-      const response = await fetch('/api/generate-reminder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction: tx }),
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.text) {
-        message = data.text;
-      } else {
-        throw new Error(data.error || 'Failed to generate message');
-      }
-    } catch (error) {
-      console.error("AI Generation failed, falling back to default:", error);
-      const daysDiff = getDaysDiff(tx.dueDate);
-      const penalty = getPenaltyAmount(tx, daysDiff);
-      const totalDue = tx.amount + penalty;
-      const formattedAmount = formatCurrency(tx.amount);
+    
+    const daysDiff = getDaysDiff(tx.dueDate);
+    const penalty = getPenaltyAmount(tx, daysDiff);
+    const totalDue = tx.amount + penalty;
+    const formattedAmount = formatCurrency(tx.amount);
       const formattedPenalty = formatCurrency(penalty);
       const formattedTotal = formatCurrency(totalDue);
       
@@ -551,13 +537,9 @@ export default function PendingPayments() {
       } else {
         message = `👋 Hi ${tx.personName},\n\nHope you're doing well!\n\nThis is a friendly reminder about the payment for *${tx.reason}*.\n\n*Amount:* ${formattedAmount}\n\nWhenever you get a chance, please complete the payment.\n\nIf you've already paid, you can ignore this message.\n\nThank you! 😊`;
       }
-    } finally {
-      setIsGeneratingAiMessage(false);
-    }
-
-    const daysDiff = getDaysDiff(tx.dueDate);
-    const penalty = getPenaltyAmount(tx, daysDiff);
-    const totalDue = tx.amount + penalty;
+    
+    setIsGeneratingAiMessage(false);
+    
     const reminderDetails = calculateReminderDetails(tx, generalSettings?.timezone);
 
     addReminderHistoryLog({
@@ -894,7 +876,7 @@ export default function PendingPayments() {
               )}
 
               <div className="space-y-1.5 pt-2">
-                <label className="text-sm font-semibold text-slate-400">AI Message Tone</label>
+                <label className="text-sm font-semibold text-slate-400">Message Tone</label>
                 <div className="relative">
                   <Brain className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                   <select

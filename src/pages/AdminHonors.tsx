@@ -376,7 +376,7 @@ export default function AdminHonors() {
         </div>
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">SmartLedger Honors</h1>
-          <p className="text-slate-400 mt-1">Admin template manager for automated AI customer recognition.</p>
+          <p className="text-slate-400 mt-1">Admin template manager for automated customer recognition.</p>
         </div>
       </div>
 

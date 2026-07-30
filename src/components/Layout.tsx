@@ -3,7 +3,6 @@ import { NavLink, Outlet, Link } from 'react-router-dom';
 import { LayoutDashboard, Wallet, Download, Clock, BarChart3, Settings, Search, Menu, X, Bell, User, Target, PiggyBank, Calculator as CalculatorIcon, Crown, Users, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
-import Chatbot from './Chatbot';
 import { useStore } from '../context/StoreContext';
 
 const navItems = [
@@ -263,7 +262,7 @@ export default function Layout() {
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
                   >
-                    {ProfileMenu()}
+                    <ProfileMenu />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -277,8 +276,6 @@ export default function Layout() {
           </div>
         </div>
       </main>
-
-      <Chatbot />
     </div>
   );
 }

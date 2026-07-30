@@ -156,7 +156,7 @@ export default function Analytics() {
             <BarChart3 className="text-blue-400" />
             Wealth Management
           </h1>
-          <p className="text-neutral-400 mt-1">Advanced AI-powered financial overview.</p>
+          <p className="text-neutral-400 mt-1">Advanced financial overview.</p>
         </div>
         
         <select value={filter} onChange={(e) => setFilter(e.target.value as DateFilter)} className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm">
@@ -187,11 +187,11 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* 1. AI Insights & Warning System */}
+      {/* 1. Insights & Warning System */}
       <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 rounded-xl bg-purple-500/10"><Sparkles className="text-purple-400" size={20}/></div>
-          <h2 className="text-lg font-bold text-white">Smart AI Insights & Warnings</h2>
+          <h2 className="text-lg font-bold text-white">Smart Insights & Warnings</h2>
         </div>
         <ul className="space-y-2 text-sm text-neutral-300">
           {aiInsights.length > 0 ? aiInsights.map((i, idx) => <li key={idx} className="flex gap-2"><span>•</span>{i}</li>) : <button onClick={generateInsights} className="px-4 py-2 bg-purple-600 rounded-lg text-white">Generate Insights</button>}
@@ -212,7 +212,7 @@ export default function Analytics() {
             </div>
         </div>
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-            <h2 className="text-lg font-bold text-white mb-4">AI Financial Forecast</h2>
+            <h2 className="text-lg font-bold text-white mb-4">Financial Forecast</h2>
             <p className="text-neutral-300">Based on your saving pattern, 30-day forecast: <span className="font-bold text-white">{formatCurrency(currentBalance * 1.2)}</span></p>
         </div>
       </div>

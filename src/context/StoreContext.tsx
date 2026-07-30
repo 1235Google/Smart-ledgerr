@@ -6,6 +6,7 @@ import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { loadStateFromCloud, syncStateToCloud } from "../lib/cloudSync";
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -163,7 +164,6 @@ export const defaultState: AppState = {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-import { loadStateFromCloud, syncStateToCloud } from '../lib/cloudSync';
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
@@ -756,7 +756,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetData = () => {
-    setState(emptyState);
+    setState(defaultState);
     try {
       localStorage.removeItem('smart-ledger-data');
     } catch (e) {

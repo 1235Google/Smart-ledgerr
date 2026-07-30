@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useStore } from '../context/StoreContext';
 import { formatDate, formatDateTime } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -6,15 +6,20 @@ import { useDropzone } from 'react-dropzone';
 import { 
   FileText, FileSpreadsheet, FileJson, Download, UploadCloud, 
   AlertCircle, CheckCircle2, FileArchive, ArrowRight, ShieldCheck,
-  RefreshCcw, Info
+  RefreshCcw, Info, X, Filter, AlertTriangle, FileX, Check, CornerDownRight
 } from 'lucide-react';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { Transaction, AppState, ReceivedMoney, SentMoney, PendingMoney } from '../types';
+import { 
+  parseImportFile, 
+  ImportParseResult, 
+  ProcessedImportRecord, 
+  ImportRecordError 
+} from '../lib/importParser';
 
 declare module 'jspdf' {
   interface jsPDF {
@@ -30,8 +35,16 @@ export default function ImportExport() {
   const [statusMsg, setStatusMsg] = useState('');
   
   // Import States
-  const [parsedTransactions, setParsedTransactions] = useState<Transaction[]>([]);
+  const [parseResult, setParseResult] = useState<ImportParseResult | null>(null);
   const [importPreview, setImportPreview] = useState(false);
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'valid' | 'duplicate' | 'invalid'>('all');
+  const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
+  const [importSuccessSummary, setImportSuccessSummary] = useState<{
+    imported: number;
+    skipped: number;
+    failed: number;
+  } | null>(null);
 
   // Helper function to update progress
   const updateProgress = (val: number, msg: string) => {
@@ -218,154 +231,145 @@ export default function ImportExport() {
   // -------------------------------------------------------------
   // IMPORT LOGIC
   // -------------------------------------------------------------
-  
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
+
+  const handleFileProcess = useCallback(async (file: File) => {
     if (!file) return;
 
+    setImportErrorMsg(null);
+    setImportSuccessSummary(null);
     setIsProcessing(true);
-    updateProgress(20, 'Reading file...');
+    updateProgress(10, 'Initializing file parser...');
 
-    const reader = new FileReader();
+    try {
+      const result = await parseImportFile(
+        file, 
+        store.transactions, 
+        (pct, msg) => updateProgress(pct, msg)
+      );
 
-    reader.onload = (e) => {
-      updateProgress(50, 'Parsing data...');
-      try {
-        const content = e.target?.result;
-        
-        if (file.name.endsWith('.json')) {
-          const parsed = JSON.parse(content as string) as AppState;
-          if (parsed && parsed.transactions) {
-            setParsedTransactions(parsed.transactions);
-            setImportPreview(true);
-          } else {
-             throw new Error('Invalid JSON structure');
-          }
-        } else if (file.name.endsWith('.csv')) {
-           Papa.parse(content as string, {
-             header: true,
-             skipEmptyLines: true,
-             complete: (results) => {
-               // Map CSV to our structure
-               const txs: Transaction[] = results.data.map((row: any) => {
-                 const type = (row.Type || row.type || 'received').toLowerCase();
-                 const amount = parseFloat(row.Amount || row.amount || '0');
-                 const date = row.Date || row.date || new Date().toISOString().split('T')[0];
-                 const person = row.Person || row.person || 'Unknown';
-                 const desc = row.Description || row.description || '';
-                 
-                 const base = { id: crypto.randomUUID(), amount, personName: person };
-                 
-                 if (type === 'sent') return { ...base, type: 'sent', date, purpose: desc } as SentMoney;
-                 if (type === 'pending') return { ...base, type: 'pending', dueDate: date, reason: desc, status: 'pending', reminderStatus: 'active', nextReminderDate: date } as PendingMoney;
-                 return { ...base, type: 'received', date, purpose: desc } as ReceivedMoney;
-               });
-               setParsedTransactions(txs);
-               setImportPreview(true);
-             }
-           });
-        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-           const workbook = XLSX.read(content, { type: 'buffer' });
-           const sheetName = workbook.SheetNames[0];
-           const sheet = workbook.Sheets[sheetName];
-           const data = XLSX.utils.sheet_to_json(sheet);
-           
-           const txs: Transaction[] = data.map((row: any) => {
-                 const type = (row.Type || row.type || 'received').toLowerCase();
-                 const amount = parseFloat(row.Amount || row.amount || '0');
-                 // Excel dates might need conversion if they are numbers, but sheet_to_json handles format if raw: false
-                 const date = row.Date || row.date || new Date().toISOString().split('T')[0];
-                 const person = row.Person || row.person || 'Unknown';
-                 const desc = row.Description || row.description || '';
-                 
-                 const base = { id: crypto.randomUUID(), amount, personName: person };
-                 
-                 if (type === 'sent') return { ...base, type: 'sent', date, purpose: desc } as SentMoney;
-                 if (type === 'pending') return { ...base, type: 'pending', dueDate: date, reason: desc, status: 'pending', reminderStatus: 'active', nextReminderDate: date } as PendingMoney;
-                 return { ...base, type: 'received', date, purpose: desc } as ReceivedMoney;
-           });
-           setParsedTransactions(txs);
-           setImportPreview(true);
-        }
-        updateProgress(100, 'Ready for import');
-      } catch (err) {
-        console.error(err);
-        updateProgress(0, 'Invalid file format');
-      } finally {
-        setTimeout(() => setIsProcessing(false), 500);
+      if (result.totalCount === 0) {
+        throw new Error('File contains no records or rows to import.');
       }
-    };
 
-    if (file.name.endsWith('.json') || file.name.endsWith('.csv')) {
-      reader.readAsText(file);
-    } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      reader.readAsArrayBuffer(file);
-    } else {
-       setIsProcessing(false);
-       alert("Please upload JSON, CSV, or Excel");
+      setParseResult(result);
+      setImportPreview(true);
+      setStatusFilter('all');
+    } catch (err: any) {
+      console.error('File import parsing error:', err);
+      setImportErrorMsg(err?.message || 'Failed to parse file. Please verify format.');
+    } finally {
+      setIsProcessing(false);
     }
-  }, []);
+  }, [store.transactions]);
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles && acceptedFiles.length > 0) {
+      handleFileProcess(acceptedFiles[0]);
+    }
+  }, [handleFileProcess]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
-    accept: {
-      'application/json': ['.json'],
-      'text/csv': ['.csv'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls']
-    },
-    maxFiles: 1
+    multiple: false
   });
 
+  const filteredPreviewRecords = useMemo(() => {
+    if (!parseResult) return [];
+    if (statusFilter === 'all') return parseResult.records;
+    return parseResult.records.filter(r => r.status === statusFilter);
+  }, [parseResult, statusFilter]);
+
   const confirmImport = () => {
-    if (!parsedTransactions.length) return;
-    
+    if (!parseResult || !parseResult.records.length) return;
+
     setIsProcessing(true);
-    updateProgress(30, 'Merging transactions...');
-    
+    updateProgress(20, 'Preparing transactions for import...');
+
     setTimeout(() => {
-      // Merge with deduplication based on ID if available
-      const existingIds = new Set(store.transactions.map(t => t.id));
-      const newTxs = parsedTransactions.filter(t => !existingIds.has(t.id));
-      
-      const mergedApp = {
+      const recordsToImport = parseResult.records.filter(r => {
+        if (r.status === 'invalid') return false;
+        if (r.status === 'duplicate' && skipDuplicates) return false;
+        return true;
+      });
+
+      if (recordsToImport.length === 0) {
+        setIsProcessing(false);
+        setImportErrorMsg('No eligible records to import based on your current settings.');
+        return;
+      }
+
+      updateProgress(60, 'Saving transactions to database...');
+
+      const newTransactions = recordsToImport.map(r => r.transaction);
+
+      // Merge with store state
+      const updatedTransactions = [...newTransactions, ...store.transactions];
+
+      store.importData({
         ...store,
-        transactions: [...newTxs, ...store.transactions]
-      };
-      
-      store.importData(mergedApp);
-      
-      updateProgress(100, 'Import Successful!');
+        transactions: updatedTransactions
+      });
+
+      const skippedCount = parseResult.totalCount - recordsToImport.length;
+
+      updateProgress(100, 'Import completed successfully!');
+
       setTimeout(() => {
         setIsProcessing(false);
         setImportPreview(false);
-        setParsedTransactions([]);
-      }, 1500);
-    }, 800);
+        setImportSuccessSummary({
+          imported: newTransactions.length,
+          skipped: skippedCount,
+          failed: parseResult.invalidCount
+        });
+        setParseResult(null);
+      }, 1000);
+    }, 500);
   };
 
+  const downloadErrorReport = () => {
+    if (!parseResult || parseResult.errors.length === 0) return;
+
+    const errorCsvData = parseResult.errors.map(err => ({
+      'Row Number': err.rowNumber,
+      'Failure Reason': err.reason,
+      'Raw Record Data': JSON.stringify(err.rawRecord || {})
+    }));
+
+    const csvContent = Papa.unparse(errorCsvData);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `Import_Error_Report_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
+  const resetImportState = () => {
+    setParseResult(null);
+    setImportPreview(false);
+    setImportErrorMsg(null);
+  };
 
   return (
-    <div className="w-full flex flex-col gap-6">
-      <header>
-        <h1 className="text-3xl font-light text-white tracking-tight">Import & Export</h1>
-        <p className="text-slate-400 mt-1">Manage your financial data securely</p>
+    <div className="w-full flex flex-col gap-6 max-w-7xl mx-auto pb-16">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Import & Export</h1>
+          <p className="text-neutral-400 text-sm mt-1">Manage, backup, and import financial ledger records securely</p>
+        </div>
       </header>
 
-      {/* Custom Tabs */}
-      <div className="flex gap-2 bg-[#0a0b10]/80 p-1 rounded-2xl w-fit border border-white/5 backdrop-blur-xl">
+      {/* Custom Navigation Tabs */}
+      <div className="flex gap-2 bg-[#0a0b10]/80 p-1.5 rounded-2xl w-fit border border-white/10 backdrop-blur-xl">
         <button
           onClick={() => setActiveTab('export')}
-          className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
-            activeTab === 'export' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-white'
+          className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === 'export' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-neutral-400 hover:text-white'
           }`}
         >
           Export & Backup
         </button>
         <button
           onClick={() => setActiveTab('import')}
-          className={`px-6 py-2 rounded-xl text-sm font-medium transition-all ${
-            activeTab === 'import' ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:text-white'
+          className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            activeTab === 'import' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-neutral-400 hover:text-white'
           }`}
         >
           Import Data
@@ -382,23 +386,23 @@ export default function ImportExport() {
             className="grid grid-cols-1 md:grid-cols-2 gap-6"
           >
             {/* Download Everything */}
-            <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-indigo-500/10 to-blue-500/10 border border-indigo-500/20 rounded-3xl p-8 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 group">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] group-hover:bg-indigo-500/20 transition-all duration-500"></div>
+            <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-3xl p-8 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 group backdrop-blur-xl">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] group-hover:bg-emerald-500/20 transition-all duration-500"></div>
               
               <div className="relative z-10 flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <FileArchive className="text-indigo-400" size={24} />
-                  <h2 className="text-2xl font-light text-white">One-Click Download</h2>
+                  <FileArchive className="text-emerald-400" size={24} />
+                  <h2 className="text-2xl font-bold text-white">One-Click Complete Export</h2>
                 </div>
-                <p className="text-slate-400 font-light max-w-xl">
-                  Get a comprehensive ZIP archive containing your financial reports in PDF, all transactions in Excel & CSV formats, and a full system backup JSON.
+                <p className="text-neutral-300 text-sm font-normal max-w-xl">
+                  Get a comprehensive ZIP archive containing your financial reports in PDF, all ledger transactions in Excel & CSV formats, and a full system backup JSON.
                 </p>
               </div>
 
               <button 
                 onClick={generateZip}
                 disabled={isProcessing}
-                className="relative z-10 flex items-center justify-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-8 py-4 rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/25 w-full md:w-auto disabled:opacity-50"
+                className="relative z-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-600/30 w-full md:w-auto disabled:opacity-50 shrink-0"
               >
                 <Download size={20} />
                 Download Everything
@@ -406,63 +410,62 @@ export default function ImportExport() {
             </div>
 
             {/* Individual Exports */}
-            <div className="bg-[#0a0b10]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6 hover:border-white/10 transition-all">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-400">
+                <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-red-400">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium text-white">Export as PDF</h3>
-                  <p className="text-xs text-slate-400">Professional financial report</p>
+                  <h3 className="text-lg font-bold text-white">Export as PDF</h3>
+                  <p className="text-xs text-neutral-400">Printable official financial report</p>
                 </div>
               </div>
-              <button onClick={generatePDF} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/5">
-                Generate PDF <ArrowRight size={16} className="text-slate-400" />
+              <button onClick={generatePDF} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+                Generate PDF <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-[#0a0b10]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6 hover:border-white/10 transition-all">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400">
+                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400">
                   <FileSpreadsheet size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium text-white">Export as Excel</h3>
-                  <p className="text-xs text-slate-400">Detailed sheets (.xlsx)</p>
+                  <h3 className="text-lg font-bold text-white">Export as Excel</h3>
+                  <p className="text-xs text-neutral-400">Formatted spreadsheets (.xlsx)</p>
                 </div>
               </div>
-              <button onClick={generateExcel} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/5">
-                Generate Excel <ArrowRight size={16} className="text-slate-400" />
+              <button onClick={generateExcel} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+                Generate Excel <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-[#0a0b10]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6 hover:border-white/10 transition-all">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400">
+                <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium text-white">Export as CSV</h3>
-                  <p className="text-xs text-slate-400">Raw transaction data</p>
+                  <h3 className="text-lg font-bold text-white">Export as CSV</h3>
+                  <p className="text-xs text-neutral-400">Raw transaction data</p>
                 </div>
               </div>
-              <button onClick={generateCSV} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/5">
-                Generate CSV <ArrowRight size={16} className="text-slate-400" />
+              <button onClick={generateCSV} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+                Generate CSV <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-[#0a0b10]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6 hover:border-white/10 transition-all relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-[50px]"></div>
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all relative overflow-hidden">
               <div className="flex items-center gap-3 mb-6 relative z-10">
-                <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center text-amber-400">
+                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400">
                   <FileJson size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium text-white">Create System Backup</h3>
-                  <p className="text-xs text-slate-400">Full JSON snapshot</p>
+                  <h3 className="text-lg font-bold text-white">Create System Backup</h3>
+                  <p className="text-xs text-neutral-400">Full encrypted JSON snapshot</p>
                 </div>
               </div>
-              <button onClick={createBackup} disabled={isProcessing} className="w-full relative z-10 flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 py-3 rounded-xl transition-colors border border-amber-500/20">
+              <button onClick={createBackup} disabled={isProcessing} className="w-full relative z-10 flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 py-3 rounded-xl transition-colors border border-amber-500/20 font-semibold text-sm">
                 Create Backup <ArrowRight size={16} />
               </button>
             </div>
@@ -476,110 +479,277 @@ export default function ImportExport() {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-6"
           >
-            {importPreview ? (
-               <div className="bg-[#0a0b10]/80 backdrop-blur-xl border border-white/5 rounded-3xl p-6">
-                 <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h3 className="text-xl font-medium text-white">Preview Import</h3>
-                      <p className="text-sm text-slate-400">Found {parsedTransactions.length} transactions</p>
-                    </div>
-                    <div className="flex gap-2">
-                       <button onClick={() => { setImportPreview(false); setParsedTransactions([]); }} className="px-4 py-2 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-colors">
-                          Cancel
-                       </button>
-                       <button onClick={confirmImport} disabled={isProcessing} className="px-4 py-2 rounded-xl bg-indigo-500 text-white hover:bg-indigo-600 shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-2">
-                          <CheckCircle2 size={18} /> Confirm Import
-                       </button>
-                    </div>
-                 </div>
+            {/* Import Success Notification */}
+            {importSuccessSummary && (
+              <div className="p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-3xl flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 size={24} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-emerald-400 font-bold text-lg">Import Completed Successfully!</h3>
+                    <p className="text-neutral-300 text-sm mt-1">
+                      Successfully imported <strong className="text-white">{importSuccessSummary.imported}</strong> ledger records. 
+                      Skipped <strong className="text-amber-400">{importSuccessSummary.skipped}</strong> duplicate or invalid records.
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setImportSuccessSummary(null)} className="p-1 text-neutral-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+            )}
 
-                 <div className="bg-white/5 rounded-2xl overflow-hidden border border-white/5">
-                    <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-1">
-                       {parsedTransactions.slice(0, 50).map((t, i) => (
-                          <div key={i} className="flex items-center justify-between p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                             <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                                   t.type === 'received' ? 'bg-emerald-500/20 text-emerald-400' :
-                                   t.type === 'sent' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
-                                }`}>
-                                   {t.type === 'received' ? 'IN' : t.type === 'sent' ? 'OUT' : 'PEN'}
-                                </div>
-                                <div>
-                                   <p className="text-white text-sm">{t.personName}</p>
-                                   <p className="text-xs text-slate-400 font-light">{formatDate(t.type === 'pending' ? (t as PendingMoney).dueDate : (t as any).date, store.generalSettings?.timezone)}</p>
-                                </div>
-                             </div>
-                             <p className={`font-medium text-sm ${
-                                t.type === 'received' ? 'text-emerald-400' :
-                                t.type === 'sent' ? 'text-red-400' : 'text-amber-400'
-                             }`}>
-                                {t.type === 'received' ? '+' : t.type === 'sent' ? '-' : ''}₹{t.amount.toLocaleString()}
-                             </p>
-                          </div>
-                       ))}
-                       {parsedTransactions.length > 50 && (
-                          <p className="text-center text-slate-400 py-3 text-sm font-light border-t border-white/5">
-                             + {parsedTransactions.length - 50} more records
-                          </p>
-                       )}
+            {/* Import Error Message */}
+            {importErrorMsg && (
+              <div className="p-5 bg-red-500/10 border border-red-500/30 rounded-3xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <AlertCircle size={22} className="text-red-400 shrink-0" />
+                  <span className="text-red-300 text-sm font-medium">{importErrorMsg}</span>
+                </div>
+                <button onClick={() => setImportErrorMsg(null)} className="p-1 text-neutral-400 hover:text-white">
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+
+            {importPreview && parseResult ? (
+              <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 md:p-8 space-y-6">
+                {/* Header & Controls */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-white/10">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white">Import Records Preview</h3>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      File: <span className="text-emerald-400 font-mono font-bold">{parseResult.fileName}</span> ({parseResult.fileType.toUpperCase()})
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button 
+                      onClick={resetImportState} 
+                      className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 text-sm font-semibold transition-colors"
+                    >
+                      Cancel / Re-upload
+                    </button>
+                    {parseResult.errors.length > 0 && (
+                      <button 
+                        onClick={downloadErrorReport} 
+                        className="px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-sm font-semibold transition-colors flex items-center gap-2"
+                      >
+                        <FileX size={16} /> Download Error Log ({parseResult.errors.length})
+                      </button>
+                    )}
+                    <button 
+                      onClick={confirmImport} 
+                      disabled={isProcessing || parseResult.validCount === 0} 
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2"
+                    >
+                      <CheckCircle2 size={18} /> Confirm & Commit Import
+                    </button>
+                  </div>
+                </div>
+
+                {/* Summary Metrics Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="p-4 bg-black/40 border border-white/10 rounded-2xl">
+                    <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Total Records</div>
+                    <div className="text-2xl font-bold text-white mt-1">{parseResult.totalCount}</div>
+                  </div>
+
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                    <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Valid Records</div>
+                    <div className="text-2xl font-bold text-emerald-400 mt-1">{parseResult.validCount}</div>
+                  </div>
+
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                    <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Duplicates</div>
+                    <div className="text-2xl font-bold text-amber-400 mt-1">{parseResult.duplicateCount}</div>
+                  </div>
+
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                    <div className="text-xs font-semibold text-red-400 uppercase tracking-wider">Invalid Rows</div>
+                    <div className="text-2xl font-bold text-red-400 mt-1">{parseResult.invalidCount}</div>
+                  </div>
+                </div>
+
+                {/* Duplicate Settings Toggle */}
+                <div className="p-4 bg-black/40 border border-white/10 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={skipDuplicates} 
+                      onChange={e => setSkipDuplicates(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-black/60 border-white/20 cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-semibold text-white">Skip Duplicate Records</span>
+                      <p className="text-xs text-neutral-400">Records matching date, amount, and name will not be imported</p>
                     </div>
-                 </div>
-               </div>
+                  </label>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
+                    {(['all', 'valid', 'duplicate', 'invalid'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        onClick={() => setStatusFilter(mode)}
+                        className={`px-3 py-1.5 rounded-lg font-semibold capitalize transition-colors ${
+                          statusFilter === mode 
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                            : 'text-neutral-400 hover:text-white'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Scrollable Records Table */}
+                <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden">
+                  <div className="max-h-[450px] overflow-y-auto relative">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-[#0c0c0c] z-10 border-b border-white/10">
+                        <tr className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">
+                          <th className="py-3 px-4">Row #</th>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">Customer / Added By</th>
+                          <th className="py-3 px-4">Amount (₹)</th>
+                          <th className="py-3 px-4">Category / Notes</th>
+                          <th className="py-3 px-4 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5 text-sm">
+                        {filteredPreviewRecords.length > 0 ? (
+                          filteredPreviewRecords.map((item) => {
+                            const isVal = item.status === 'valid';
+                            const isDup = item.status === 'duplicate';
+                            const isInv = item.status === 'invalid';
+                            const tx = item.transaction;
+
+                            return (
+                              <tr key={item.rowNumber} className="hover:bg-white/[0.03] transition-colors">
+                                <td className="py-3.5 px-4 font-mono text-xs text-neutral-500">
+                                  #{item.rowNumber}
+                                </td>
+                                <td className="py-3.5 px-4 text-neutral-300 font-mono text-xs whitespace-nowrap">
+                                  {isInv ? '-' : (tx as any).date || (tx as any).dueDate || 'N/A'}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                  {isInv ? '-' : (
+                                    <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                                      tx.type === 'received' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                      tx.type === 'sent' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                      'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                    }`}>
+                                      {tx.type}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-white whitespace-nowrap">
+                                  {isInv ? (item.rawRecord?.Name || item.rawRecord?.Person || 'Invalid') : tx.personName}
+                                </td>
+                                <td className="py-3.5 px-4 font-bold text-emerald-400 whitespace-nowrap">
+                                  {isInv ? '-' : `₹${(Number(tx.amount) || 0).toLocaleString('en-IN')}`}
+                                </td>
+                                <td className="py-3.5 px-4 text-neutral-300 text-xs max-w-xs truncate">
+                                  {isInv ? '-' : ((tx as any).purpose || (tx as any).reason || (tx as any).category || '-')}
+                                </td>
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                  {isVal && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1">
+                                      <Check size={12} /> Valid
+                                    </span>
+                                  )}
+                                  {isDup && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 inline-flex items-center gap-1" title="Matches existing record">
+                                      <AlertTriangle size={12} /> Duplicate
+                                    </span>
+                                  )}
+                                  {isInv && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 inline-flex items-center gap-1" title={item.errorReason}>
+                                      <AlertCircle size={12} /> Invalid
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="text-center py-12 text-neutral-400">
+                              No records match filter "{statusFilter}".
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div 
                 {...getRootProps()} 
                 className={`border-2 border-dashed rounded-3xl p-12 text-center transition-all cursor-pointer ${
-                  isDragActive ? 'border-indigo-500 bg-indigo-500/5' : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                  isDragActive 
+                    ? 'border-emerald-500 bg-emerald-500/10' 
+                    : 'border-white/10 hover:border-emerald-500/40 hover:bg-white/[0.02]'
                 }`}
               >
                 <input {...getInputProps()} />
-                <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 to-blue-500/20 rounded-full mx-auto flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/10">
-                  <UploadCloud size={32} className="text-indigo-400" />
+                <div className="w-20 h-20 bg-gradient-to-tr from-emerald-600/20 to-teal-500/20 border border-emerald-500/30 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/10">
+                  <UploadCloud size={36} className="text-emerald-400" />
                 </div>
-                <h3 className="text-xl font-medium text-white mb-2">
-                  {isDragActive ? 'Drop file to import' : 'Drag & drop file here'}
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  {isDragActive ? 'Drop file to process' : 'Drag & Drop CSV, Excel, or JSON File'}
                 </h3>
-                <p className="text-slate-400 font-light mb-6">Supports .json, .csv bank statements</p>
-                <button className="bg-white/10 hover:bg-white/15 text-white px-6 py-2.5 rounded-xl font-medium transition-colors border border-white/5">
+                <p className="text-neutral-400 text-sm mb-6 max-w-md mx-auto">
+                  Automatically parses and maps <strong className="text-white">.csv</strong>, <strong className="text-white">.xlsx</strong>, <strong className="text-white">.xls</strong>, and <strong className="text-white">.json</strong> bank or ledger statements.
+                </p>
+                <button 
+                  type="button" 
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/20 border border-emerald-500/30"
+                >
                   Browse Files
                 </button>
               </div>
             )}
 
+            {/* Security Banner */}
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-5 flex items-start gap-4">
-               <Info className="text-blue-400 shrink-0 mt-0.5" size={20} />
-               <div>
-                  <h4 className="text-blue-400 font-medium mb-1">Import Security</h4>
-                  <p className="text-sm text-blue-200/70 font-light leading-relaxed">
-                    All imported files are processed strictly on your local device. SmartLedger automatically detects and prevents duplicate transactions based on existing records to maintain data integrity.
-                  </p>
-               </div>
+              <Info className="text-blue-400 shrink-0 mt-0.5" size={20} />
+              <div>
+                <h4 className="text-blue-400 font-bold mb-1">Local Processing & Deduplication Security</h4>
+                <p className="text-xs text-blue-200/80 font-normal leading-relaxed">
+                  All imported files are parsed locally on your device. Column headers like <code className="bg-blue-900/50 px-1 py-0.5 rounded text-blue-300">Date</code>, <code className="bg-blue-900/50 px-1 py-0.5 rounded text-blue-300">Amount</code>, <code className="bg-blue-900/50 px-1 py-0.5 rounded text-blue-300">Category</code>, <code className="bg-blue-900/50 px-1 py-0.5 rounded text-blue-300">Person/Customer</code>, and <code className="bg-blue-900/50 px-1 py-0.5 rounded text-blue-300">Type</code> are auto-mapped regardless of letter casing or browser MIME formatting.
+                </p>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Global Processing Overlay */}
+      {/* Global Processing Progress Overlay */}
       <AnimatePresence>
         {isProcessing && (
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#05060a]/80 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
           >
-             <div className="bg-[#0a0b10] border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
-                <RefreshCcw size={40} className="text-indigo-500 animate-spin mb-6" />
-                <h3 className="text-xl font-light text-white mb-2">{statusMsg || 'Processing...'}</h3>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden mt-4">
-                   <motion.div 
-                     className="h-full bg-gradient-to-r from-indigo-500 to-blue-400"
-                     initial={{ width: 0 }}
-                     animate={{ width: `${progress}%` }}
-                     transition={{ ease: "linear", duration: 0.2 }}
-                   />
-                </div>
-             </div>
+            <div className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
+              <RefreshCcw size={40} className="text-emerald-400 animate-spin mb-6" />
+              <h3 className="text-lg font-bold text-white mb-2">{statusMsg || 'Processing Data...'}</h3>
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mt-4">
+                <motion.div 
+                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ ease: "linear", duration: 0.15 }}
+                />
+              </div>
+              <span className="text-xs font-mono text-neutral-400 mt-2">{progress}%</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

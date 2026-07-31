@@ -181,10 +181,9 @@ export default function Dashboard() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="relative bg-gradient-to-br from-[#0B1026] via-[#1a1b4b] to-[#2D4DFF] p-8 rounded-[2rem] border border-white/10 overflow-hidden shadow-[0_20px_40px_-15px_rgba(45,77,255,0.4)] backdrop-blur-xl"
       >
-        {/* Soft radial lighting effects */}
-        <div className="absolute -top-32 -left-32 w-64 h-64 bg-purple-500/30 rounded-full blur-[80px] pointer-events-none"></div>
         <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-blue-500/30 rounded-full blur-[80px] pointer-events-none"></div>
         
         {/* Subtle premium noise texture */}
@@ -223,15 +222,6 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <Link to="/received" className="flex-1 sm:flex-none justify-center px-5 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-xl font-medium transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(255,255,255,0.08)] text-sm flex items-center gap-2 text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md">
-              <ArrowDownLeft size={16} strokeWidth={1.5} /> Add Received
-            </Link>
-            <Link to="/pending" className="flex-1 sm:flex-none justify-center px-5 py-2.5 bg-gradient-to-r from-blue-500/80 to-indigo-500/80 hover:from-blue-400/90 hover:to-indigo-400/90 border border-white/20 rounded-xl font-medium transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(45,77,255,0.4)] text-sm flex items-center gap-2 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] backdrop-blur-md">
-              <Clock size={16} strokeWidth={1.5} /> Add Pending
-            </Link>
-          </div>
         </div>
       </motion.div>
 
@@ -240,7 +230,7 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl relative overflow-hidden group"
         >
           <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -256,7 +246,7 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl relative overflow-hidden group"
         >
           <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -288,7 +278,7 @@ export default function Dashboard() {
                 key={tx.id}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 * idx }}
+                transition={{ delay: 0.4 + 0.1 * idx, duration: 0.5, ease: 'easeOut' }}
                 className="group bg-white/5 hover:bg-white/[0.08] border border-white/5 hover:border-white/10 p-4 rounded-2xl flex items-center gap-4 transition-all"
               >
                 <div className={cn(

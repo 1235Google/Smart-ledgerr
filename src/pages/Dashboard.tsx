@@ -43,7 +43,7 @@ export default function Dashboard() {
   const duplicateInvoices = Array.from(invoiceNumberMap.values()).filter(group => group.length > 1);
 
   return (
-    <div className="space-y-8 pb-20 md:pb-0">
+    <div className="w-full space-y-8">
       <header className="mb-10">
         <h1 className="text-3xl font-[800] tracking-[-0.03em] text-white mb-2">Dashboard</h1>
         

@@ -128,9 +128,8 @@ export default function MonthlyReports() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white p-4 md:p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="mb-8">
+    <div className="w-full max-w-4xl space-y-6">
+      <header className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
             Monthly Reports
           </h1>
@@ -290,7 +289,6 @@ export default function MonthlyReports() {
             </div>
           )}
         </motion.div>
-      </div>
     </div>
   );
 }

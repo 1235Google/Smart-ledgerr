@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -109,103 +108,12 @@ export async function generateEntriesReport(options: ExportOptions): Promise<voi
   });
 
   if (options.format === 'excel') {
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'SmartLedger';
-    wb.created = new Date();
-
-    const ws = wb.addWorksheet('Entries Report');
-
-    // Title Block
-    ws.mergeCells('A1:L1');
-    const titleCell = ws.getCell('A1');
-    titleCell.value = 'SmartLedger Entries Report';
-    titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } }; // emerald-600
-    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-    ws.getRow(1).height = 40;
-
-    // Meta Block
-    ws.addRow([]);
-    ws.addRow(['Export Date & Time:', dateStrPretty, '', 'Total Entries:', totalEntries]);
-    ws.addRow(['Total Received Amount:', totalReceived, '', 'Total Pending Amount:', totalPending]);
-    ws.getRow(3).font = { bold: true };
-    ws.getRow(4).font = { bold: true };
-    ws.getCell('B4').numFmt = '[$₹-en-IN]#,##0.00';
-    ws.getCell('E4').numFmt = '[$₹-en-IN]#,##0.00';
-    ws.addRow([]);
-
-    // Table Header Row
-    const headerRow = ws.addRow([
-      'S.No',
-      'Customer / Name',
-      'Phone Number',
-      'Amount (₹)',
-      'Status',
-      'Category',
-      'Payment Method',
-      'Transaction Date',
-      'Due Date',
-      'Notes / Purpose',
-      'Created Date',
-      'Updated Date'
-    ]);
-
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } }; // dark neutral-900
-    headerRow.height = 25;
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-
-    // Freeze header pane
-    ws.views = [{ state: 'frozen', ySplit: 6 }];
-
-    // Populate Data
+    let csvContent = 'S.No,Customer Name,Phone Number,Amount (Rs),Status,Category,Payment Method,Transaction Date,Due Date,Notes,Created Date,Updated Date\n';
     filteredData.forEach((item, idx) => {
-      const row = ws.addRow([
-        idx + 1,
-        item.personName || item.customerName || 'N/A',
-        item.phoneNumber || item.phone || 'N/A',
-        Number(item.amount) || 0,
-        (item.status || item.type || 'Completed').toUpperCase(),
-        item.category || item.purpose || 'General',
-        item.method || item.paymentMethod || 'UPI',
-        item.date || 'N/A',
-        item.dueDate || 'N/A',
-        item.note || item.notes || item.reason || 'N/A',
-        item.createdAt ? format(parseRecordDate(item.createdAt) || new Date(), 'yyyy-MM-dd') : (item.date || 'N/A'),
-        item.updatedAt ? format(parseRecordDate(item.updatedAt) || new Date(), 'yyyy-MM-dd') : (item.date || 'N/A')
-      ]);
-
-      // Format Amount cell
-      const amtCell = row.getCell(4);
-      amtCell.numFmt = '[$₹-en-IN]#,##0.00';
-      amtCell.alignment = { horizontal: 'right' };
-
-      // Alternating row styling
-      if (idx % 2 === 0) {
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      }
+      csvContent += `${idx + 1},"${item.personName || item.customerName || 'N/A'}","${item.phoneNumber || item.phone || 'N/A'}",${Number(item.amount) || 0},"${(item.status || item.type || 'Completed').toUpperCase()}","${item.category || item.purpose || 'General'}","${item.method || item.paymentMethod || 'UPI'}","${item.date || 'N/A'}","${item.dueDate || 'N/A'}","${item.note || item.notes || item.reason || 'N/A'}","${item.createdAt ? format(parseRecordDate(item.createdAt) || new Date(), 'yyyy-MM-dd') : (item.date || 'N/A')}","${item.updatedAt ? format(parseRecordDate(item.updatedAt) || new Date(), 'yyyy-MM-dd') : (item.date || 'N/A')}"\n`;
     });
-
-    // Summary Total Row
-    const totalRow = ws.addRow(['', 'TOTAL', '', totalReceived, '', '', '', '', '', '', '', '']);
-    totalRow.font = { bold: true, size: 11 };
-    totalRow.getCell(4).numFmt = '[$₹-en-IN]#,##0.00';
-    totalRow.getCell(4).alignment = { horizontal: 'right' };
-    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
-
-    // Auto-fit column widths
-    ws.columns.forEach((col, i) => {
-      let maxLen = 12;
-      ws.getColumn(i + 1).eachCell({ includeEmpty: true }, (cell) => {
-        const valStr = cell.value ? String(cell.value) : '';
-        if (valStr.length > maxLen) maxLen = valStr.length;
-      });
-      col.width = Math.min(Math.max(maxLen + 3, 12), 40);
-    });
-
-    const buffer = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `SmartLedger_Entries_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `SmartLedger_Entries_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
     // --- PDF EXPORT ---
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -324,50 +232,7 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
   });
 
   if (options.format === 'excel') {
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'SmartLedger';
-    wb.created = new Date();
-
-    const ws = wb.addWorksheet('Pending Payments');
-
-    // Title Block
-    ws.mergeCells('A1:H1');
-    const titleCell = ws.getCell('A1');
-    titleCell.value = 'SmartLedger Pending Payments Report';
-    titleCell.font = { name: 'Arial', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-    titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } }; // amber-600
-    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-    ws.getRow(1).height = 40;
-
-    // Meta Block
-    ws.addRow([]);
-    ws.addRow(['Export Date & Time:', dateStrPretty, '', 'Total Pending Records:', totalPendingEntries]);
-    ws.addRow(['Total Pending Amount:', totalPendingAmount, '', 'Overdue Count:', overdueCount]);
-    ws.getRow(3).font = { bold: true };
-    ws.getRow(4).font = { bold: true };
-    ws.getCell('B4').numFmt = '[$₹-en-IN]#,##0.00';
-    ws.addRow([]);
-
-    // Table Header Row
-    const headerRow = ws.addRow([
-      'S.No',
-      'Customer Name',
-      'Phone Number',
-      'Pending Amount (₹)',
-      'Due Date',
-      'Reminder Date',
-      'Days Remaining / Status',
-      'Notes / Reason'
-    ]);
-
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF111827' } };
-    headerRow.height = 25;
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-
-    ws.views = [{ state: 'frozen', ySplit: 6 }];
-
-    // Populate Data
+    let csvContent = 'S.No,Customer Name,Phone Number,Pending Amount (Rs),Due Date,Reminder Date,Days Remaining / Status,Notes / Reason\n';
     filteredData.forEach((item, idx) => {
       let daysRemainingStr = 'Pending';
       if (item.dueDate) {
@@ -383,47 +248,10 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
           }
         }
       }
-
-      const row = ws.addRow([
-        idx + 1,
-        item.personName || item.customerName || 'N/A',
-        item.phoneNumber || item.phone || 'N/A',
-        Number(item.amount) || 0,
-        item.dueDate || item.date || 'N/A',
-        item.reminderDate || 'N/A',
-        daysRemainingStr,
-        item.notes || item.reason || item.note || 'N/A'
-      ]);
-
-      const amtCell = row.getCell(4);
-      amtCell.numFmt = '[$₹-en-IN]#,##0.00';
-      amtCell.alignment = { horizontal: 'right' };
-
-      if (idx % 2 === 0) {
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
-      }
+      csvContent += `${idx + 1},"${item.personName || item.customerName || 'N/A'}","${item.phoneNumber || item.phone || 'N/A'}",${Number(item.amount) || 0},"${item.dueDate || item.date || 'N/A'}","${item.reminderDate || 'N/A'}","${daysRemainingStr}","${item.notes || item.reason || item.note || 'N/A'}"\n`;
     });
-
-    // Summary Total Row
-    const totalRow = ws.addRow(['', 'TOTAL PENDING', '', totalPendingAmount, '', '', '', '']);
-    totalRow.font = { bold: true, size: 11 };
-    totalRow.getCell(4).numFmt = '[$₹-en-IN]#,##0.00';
-    totalRow.getCell(4).alignment = { horizontal: 'right' };
-    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
-
-    // Auto column widths
-    ws.columns.forEach((col, i) => {
-      let maxLen = 12;
-      ws.getColumn(i + 1).eachCell({ includeEmpty: true }, (cell) => {
-        const valStr = cell.value ? String(cell.value) : '';
-        if (valStr.length > maxLen) maxLen = valStr.length;
-      });
-      col.width = Math.min(Math.max(maxLen + 3, 12), 40);
-    });
-
-    const buffer = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `SmartLedger_Pending_Report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
-
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `SmartLedger_Pending_Report_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
     // --- PDF EXPORT ---
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -536,14 +364,12 @@ export async function generateGullakReport(options: ExportOptions): Promise<void
   const dateStrPretty = format(new Date(), 'dd MMM yyyy, hh:mm a');
 
   if (options.format === 'excel') {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Gullak Entries');
-    ws.addRow(['Date', 'Type', 'Amount', 'Notes']);
+    let csvContent = 'Date,Type,Amount,Notes\n';
     filteredData.forEach(item => {
-      ws.addRow([item.date, item.category, item.amount, item.note]);
+      csvContent += `${item.date},"${item.category}",${item.amount},"${item.note}"\n`;
     });
-    const buffer = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
     const doc = new jsPDF();
     doc.text('Gullak Entries Report', 14, 14);

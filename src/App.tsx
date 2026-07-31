@@ -21,6 +21,8 @@ import Calculator from './pages/Calculator';
 import TimelineReplay from './pages/TimelineReplay';
 import SecurityWrapper from './components/SecurityWrapper';
 import SecurityCenter from './pages/SecurityCenter';
+import Help from './pages/Help';
+import About from './pages/About';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -112,6 +114,8 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="security" element={<SecurityCenter />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="help" element={<Help />} />
+        <Route path="about" element={<About />} />
       </Route>
     </Routes>
   );

@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Fingerprint, ScanFace, XCircle, Delete, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { startAuthentication } from '@simplewebauthn/browser';
+import { createNotification } from '../lib/notificationService';
 
 interface LockScreenProps {
   onUnlock: () => void;
 }
 
 export default function LockScreen({ onUnlock }: LockScreenProps) {
-  const { securitySettings, updateSecuritySettings } = useStore();
+  const { securitySettings, updateSecuritySettings, unlockApp } = useStore();
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -23,7 +24,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState(0);
-  const pinLength = securitySettings.pin?.length || 4;
+  const pinLength = 4;
   
   const [isCreatingPin, setIsCreatingPin] = useState(securitySettings.pinEnabled && !securitySettings.pin);
   const [confirmPinInput, setConfirmPinInput] = useState('');
@@ -161,6 +162,33 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     }
   };
 
+  const verifyAndUnlock = (pinToVerify: string) => {
+    if (lockoutTime > 0 || pinToVerify.length !== pinLength) return;
+
+    const success = unlockApp(pinToVerify);
+    if (success) {
+      setFailedAttempts(0);
+      setIsUnlocking(true);
+      setTimeout(onUnlock, 400);
+    } else {
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      setError(true);
+      if (newAttempts >= 5) {
+        setLockoutTime(30);
+        createNotification({
+          title: 'Unauthorized Access Attempt',
+          message: 'Multiple failed PIN attempts detected. Device locked for 30 seconds.',
+          type: 'security_unauthorized_access'
+        });
+      }
+      setTimeout(() => {
+        setPinInput('');
+        setError(false);
+      }, 800);
+    }
+  };
+
   const handlePinInput = (digit: string) => {
     if (lockoutTime > 0) return;
     
@@ -169,6 +197,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       setPinInput(newVal);
       setError(false);
       inputRef.current?.focus();
+      if (newVal.length === pinLength) {
+        verifyAndUnlock(newVal);
+      }
     }
   };
 
@@ -178,6 +209,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     if (val.length <= pinLength) {
       setPinInput(val);
       setError(false);
+      if (val.length === pinLength) {
+        verifyAndUnlock(val);
+      }
     }
   };
 
@@ -185,7 +219,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     if (lockoutTime > 0) return;
     if (e.key === 'Enter') {
       if (pinInput.length === pinLength) {
-        handleUnlockClick();
+        verifyAndUnlock(pinInput);
       }
     } else if (e.key === 'Delete') {
       setPinInput('');
@@ -193,28 +227,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   };
 
   const handleUnlockClick = () => {
-    if (lockoutTime > 0 || pinInput.length !== pinLength) return;
-
-    if (securitySettings.pinEnabled && pinInput === securitySettings.pin) {
-      setFailedAttempts(0);
-      setIsUnlocking(true);
-      setTimeout(onUnlock, 800);
-    } else if (!securitySettings.pinEnabled && pinInput === '0000') {
-      setFailedAttempts(0);
-      setIsUnlocking(true);
-      setTimeout(onUnlock, 800);
-    } else {
-      const newAttempts = failedAttempts + 1;
-      setFailedAttempts(newAttempts);
-      setError(true);
-      if (newAttempts >= 5) {
-        setLockoutTime(30);
-      }
-      setTimeout(() => {
-        setPinInput('');
-        setError(false);
-      }, 800);
-    }
+    verifyAndUnlock(pinInput);
   };
 
   const handleDelete = () => {

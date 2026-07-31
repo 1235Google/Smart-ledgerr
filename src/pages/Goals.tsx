@@ -55,7 +55,7 @@ export default function Goals() {
   };
 
   return (
-    <div className="space-y-8 pb-20 md:pb-0">
+    <div className="w-full space-y-8">
       <header>
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center text-indigo-400">

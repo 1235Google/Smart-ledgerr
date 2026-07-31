@@ -17,7 +17,6 @@ import {
   ChevronDown,
   Clock
 } from 'lucide-react';
-import * as math from 'mathjs';
 import { useStore } from '../context/StoreContext';
 import { cn } from '../lib/utils';
 
@@ -60,12 +59,12 @@ export default function Calculator() {
   // Math Evaluation
   const evaluateExpression = (expr: string) => {
     try {
-      // Replace × and ÷ for mathjs
-      const sanitizedExpr = expr.replace(/×/g, '*').replace(/÷/g, '/');
-      const result = math.evaluate(sanitizedExpr);
+      // Replace × and ÷ for native JS
+      const sanitizedExpr = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9+\-*/.()]/g, '');
+      const result = new Function('return ' + sanitizedExpr)();
       if (typeof result === 'number') {
-        // Handle floating point precision
-        return math.format(result, { precision: 14 }).toString();
+        // Handle floating point precision roughly
+        return parseFloat(result.toFixed(14)).toString();
       }
       return result.toString();
     } catch (e) {
@@ -355,7 +354,7 @@ export default function Calculator() {
   );
 
   return (
-    <div className="h-full flex flex-col md:flex-row gap-6 relative max-w-6xl mx-auto" ref={calculatorRef}>
+    <div className="w-full flex flex-col md:flex-row gap-6 relative max-w-6xl mx-auto" ref={calculatorRef}>
       
       {/* Calculator Main Panel */}
       <div className="flex-1 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl relative">

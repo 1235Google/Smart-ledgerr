@@ -7,7 +7,7 @@ export default function SecurityCenter() {
   const { securitySettings, updateSecuritySettings, lockApp } = useStore();
 
   return (
-    <div className="space-y-8 pb-20 max-w-7xl mx-auto">
+    <div className="w-full space-y-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-white tracking-tight">Security Center</h1>
         <p className="text-neutral-400 mt-1">Manage your app security and access.</p>

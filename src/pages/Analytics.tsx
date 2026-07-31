@@ -149,7 +149,7 @@ export default function Analytics() {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   return (
-    <div className="space-y-8 pb-20 max-w-7xl mx-auto print:text-black">
+    <div className="w-full space-y-8 print:text-black">
       <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">

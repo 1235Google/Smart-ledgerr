@@ -112,7 +112,7 @@ export default function TimelineReplay() {
   };
 
   return (
-    <div className="space-y-8 pb-20 md:pb-0">
+    <div className="w-full space-y-8">
       <header className="mb-10">
         <h1 className="text-3xl font-[800] tracking-[-0.03em] text-white mb-2">Timeline Replay</h1>
         <p className="text-[#8e96a4] mt-2">View your financial history exactly as it appeared on any date.</p>

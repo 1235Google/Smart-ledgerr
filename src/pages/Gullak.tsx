@@ -296,7 +296,7 @@ export default function Gullak() {
   const savingsDiff = lastMonthSavings > 0 ? ((thisMonthSavings - lastMonthSavings) / lastMonthSavings) * 100 : 100;
   
   return (
-    <div className="space-y-8 pb-20 max-w-7xl mx-auto">
+    <div className="w-full space-y-8">
       {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}

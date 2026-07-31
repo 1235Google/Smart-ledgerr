@@ -306,3 +306,45 @@ export interface UserProfile {
   lastLogin: string;
   activeDevice: string;
 }
+
+export type NotificationType =
+  | 'auth_google_login'
+  | 'auth_google_logout'
+  | 'auth_pin_changed'
+  | 'auth_pin_reset'
+  | 'auth_profile_updated'
+  | 'ledger_transaction_added'
+  | 'ledger_transaction_edited'
+  | 'ledger_transaction_deleted'
+  | 'ledger_income_added'
+  | 'ledger_expense_added'
+  | 'pending_created'
+  | 'pending_updated'
+  | 'pending_paid'
+  | 'pending_reminder_sent'
+  | 'report_generated'
+  | 'report_export_completed'
+  | 'report_import_completed'
+  | 'security_new_device'
+  | 'security_session_expired'
+  | 'security_password_changed'
+  | 'security_unauthorized_access'
+  | 'security_settings_updated'
+  | 'admin_user_created'
+  | 'admin_user_deleted'
+  | 'admin_user_blocked'
+  | 'admin_user_restored'
+  | 'admin_db_backup'
+  | 'admin_db_restore';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  createdAt: string;
+  read: boolean;
+  userId: string;
+  referenceId?: string;
+}
+

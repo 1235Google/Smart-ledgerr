@@ -9,6 +9,7 @@ import {
   generateGullakReport,
   filterRecordsForExport 
 } from '../lib/reportsExportEngine';
+import { createNotification } from '../lib/notificationService';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -83,6 +84,12 @@ export default function ExportModal({
 
       const ext = format === 'excel' ? 'XLSX' : 'PDF';
       setSuccessMsg(`Successfully generated ${ext} report for ${filteredRecords.length} records!`);
+      
+      createNotification({
+        title: 'Export Completed',
+        message: `Successfully exported ${filteredRecords.length} records to ${ext} format`,
+        type: 'report_export_completed'
+      });
       
       setTimeout(() => {
         setSuccessMsg('');

@@ -5,11 +5,7 @@ import { formatDate } from '../lib/utils';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { X, TrendingUp, TrendingDown, Target, Shield, CreditCard, Clock, Play, BarChart2, CheckCircle, Info, Heart, Activity } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Canvas } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
-import { EffectComposer, Bloom, DepthOfField, Noise, Vignette, SSAO } from '@react-three/postprocessing';
-import * as THREE from 'three';
-import { LuxuryVaultDisplay, ParallaxCamera } from '../components/Vault3D';
+import { LuxuryVaultDisplay } from '../components/Vault3D';
 
 interface CashEvent {
   id: number;
@@ -289,30 +285,20 @@ export default function VaultPage() {
   const pendingPayments = store.transactions.filter((t): t is PendingMoney => t.type === 'pending' && t.status === 'pending');
 
   return (
-    <div className="min-h-full flex flex-col gap-6 w-full relative">
+    <div className="w-full flex flex-col gap-6 relative">
       <header className="mb-2">
         <h1 className="text-3xl font-light text-white tracking-tight">Money Vault</h1>
         <p className="text-slate-400 mt-1">Premium visual overview of your net worth</p>
       </header>
       
-      <div className="flex-1 relative rounded-[2rem] overflow-hidden shadow-[0_0_80px_rgba(139,92,246,0.15)] border border-white/5 bg-[#05060a] min-h-[75vh]">
+      <div className="relative rounded-[2rem] overflow-hidden shadow-[0_0_80px_rgba(139,92,246,0.15)] border border-white/5 bg-[#05060a] min-h-[550px]">
         {/* Dark luxury gradient background */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-950/30 via-[#0a0b10] to-[#05060a] z-0" />
 
         {/* Ambient background particles (UI layer) */}
         <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-screen" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />
 
-        <div className="absolute inset-0 z-0 pointer-events-auto">
-          <Canvas camera={{ position: [0, 1.5, 9], fov: 40 }} gl={{ antialias: false, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1 }}>
-            <color attach="background" args={['#05060a']} />
-            
-            <ambientLight intensity={0.4} />
-            <spotLight position={[10, 15, 10]} angle={0.3} penumbra={1} intensity={2} castShadow />
-            <spotLight position={[-10, 5, -10]} angle={0.4} penumbra={1} intensity={1} color="#bfdbfe" />
-            <pointLight position={[5, 2, 5]} color="#8b5cf6" intensity={1} distance={15} />
-            
-            <Environment preset="studio" />
-            
+        <div className="absolute inset-0 z-0 pointer-events-auto flex items-center justify-center p-12">
             <Suspense fallback={null}>
               <LuxuryVaultDisplay 
                 balance={displayBalance} 
@@ -322,17 +308,6 @@ export default function VaultPage() {
                 vaultLoaded={vaultLoaded}
               />
             </Suspense>
-            
-            <ParallaxCamera />
-            
-            <EffectComposer enableNormalPass multisampling={0}>
-              <SSAO radius={0.2} intensity={20} luminanceInfluence={0.4} />
-              <Bloom luminanceThreshold={0.5} mipmapBlur intensity={1.2} />
-              <DepthOfField focusDistance={0} focalLength={0.03} bokehScale={3} height={480} />
-              <Noise opacity={0.025} />
-              <Vignette eskil={false} offset={0.1} darkness={1.1} />
-            </EffectComposer>
-          </Canvas>
         </div>
         
         {/* Top Controls */}

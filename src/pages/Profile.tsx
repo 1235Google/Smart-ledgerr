@@ -171,7 +171,7 @@ export default function Profile() {
   };
 
   return (
-    <div className={cn("min-h-screen text-white pb-24 overflow-x-hidden transition-colors duration-300", amoledMode ? "bg-[#000000]" : "bg-[#05060a]")}>
+    <div className="w-full text-white space-y-8 overflow-x-hidden">
       
       {/* Toast Notification Banner */}
       <AnimatePresence>

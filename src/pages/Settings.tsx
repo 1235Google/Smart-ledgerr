@@ -7,6 +7,7 @@ import { cn, formatDate } from '../lib/utils';
 
 import BiometricSettings from '../components/BiometricSettings';
 import ResetDataModal from "../components/ResetDataModal";
+import ChangePinModal from '../components/ChangePinModal';
 import SettingsSection from '../components/settings/SettingsSection';
 import SettingsItem from '../components/settings/SettingsItem';
 import Switch from '../components/settings/Switch';
@@ -112,8 +113,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060606] text-slate-100 font-sans pb-20">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-12">
+    <div className="w-full max-w-3xl mx-auto space-y-8">
             
             {/* Header */}
             <div className="flex items-center justify-between mb-10">
@@ -198,8 +198,8 @@ export default function Settings() {
                     reader.readAsText(file);
                 }
             }} />
-        </div>
         <ResetDataModal isOpen={showResetModal} onClose={() => setShowResetModal(false)} />
+        <ChangePinModal isOpen={showPinSetup} onClose={() => setShowPinSetup(false)} />
     </div>
   );
 }

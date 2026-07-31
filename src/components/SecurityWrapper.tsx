@@ -3,8 +3,7 @@ import { useStore } from '../context/StoreContext';
 import LockScreen from './LockScreen';
 
 export default function SecurityWrapper({ children }: { children: React.ReactNode }) {
-  const { securitySettings, isAuthenticated } = useStore();
-  const [isLocked, setIsLocked] = useState(securitySettings.pinEnabled && !!securitySettings.pin);
+  const { securitySettings, isAuthenticated, isLocked, lockApp, unlockApp } = useStore();
   const lastActivityRef = useRef<number>(Date.now());
   const autoLockTimeRef = useRef(securitySettings.autoLockTime);
 
@@ -36,7 +35,7 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
       if (lockTime > 0) {
         const inactiveFor = Date.now() - lastActivityRef.current;
         if (inactiveFor >= lockTime * 60 * 1000) {
-          setIsLocked(true);
+          lockApp();
         }
       }
     }, 1000);
@@ -48,18 +47,7 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
       });
       clearInterval(interval);
     };
-  }, [isLocked]);
-
-  // Sync initial lock state if settings change
-  useEffect(() => {
-    if (securitySettings.pinEnabled && !securitySettings.pin) {
-      // Don't lock if PIN is enabled but not set
-      setIsLocked(false);
-    }
-    if (!securitySettings.pinEnabled) {
-      setIsLocked(false);
-    }
-  }, [securitySettings.pinEnabled, securitySettings.pin]);
+  }, [isLocked, isAuthenticated, lockApp]);
 
   if (!isAuthenticated) {
     return <>{children}</>;
@@ -67,7 +55,6 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
 
   if (isLocked) {
     return <LockScreen onUnlock={() => {
-      setIsLocked(false);
       lastActivityRef.current = Date.now();
     }} />;
   }

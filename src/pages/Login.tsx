@@ -1,71 +1,67 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
 import { useStore } from '../context/StoreContext';
 import { Loader2 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLogin, setIsLogin] = useState(true);
+  const [pin, setPin] = useState(['', '', '', '']);
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [shake, setShake] = useState(false);
   const navigate = useNavigate();
-  const { updateUserProfile } = useStore();
+  const { loginWithPin } = useStore();
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  useEffect(() => {
+    // Focus first input on mount
+    pinRefs.current[0]?.focus();
+  }, []);
 
-    try {
-      let userCredential;
-      if (isLogin) {
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      }
-      
-      await handleUserSync(userCredential.user);
-      navigate('/');
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Authentication failed');
-    } finally {
-      setLoading(false);
+  const handlePinChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    
+    const newPin = [...pin];
+    newPin[index] = value;
+    setPin(newPin);
+
+    // Auto-advance
+    if (value && index < 3) {
+      pinRefs.current[index + 1]?.focus();
+    }
+    
+    // Check if full PIN entered
+    if (newPin.every(p => p !== '') && newPin.length === 4) {
+      handlePinSubmit(newPin.join(''));
     }
   };
 
-  const handleUserSync = async (user: any) => {
-    const userRef = doc(db, 'users', user.uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        displayName: user.displayName || user.email?.split('@')[0] || 'User',
-        email: user.email,
-        photoURL: user.photoURL || '',
-        provider: user.providerData[0]?.providerId || 'email',
-        createdAt: serverTimestamp(),
-        lastLogin: serverTimestamp(),
-      }, { merge: true });
-    } else {
-      await setDoc(userRef, {
-        displayName: user.displayName || userSnap.data().displayName,
-        photoURL: user.photoURL || userSnap.data().photoURL,
-        lastLogin: serverTimestamp(),
-      }, { merge: true });
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinRefs.current[index - 1]?.focus();
     }
-    updateUserProfile({
-      fullName: user.displayName || user.email?.split('@')[0] || 'User',
-      email: user.email,
-      profilePhoto: user.photoURL || '',
-      lastLogin: new Date().toISOString()
-    });
+  };
+
+  const handlePinSubmit = (fullPin: string) => {
+    if (loading) return;
+    setLoading(true);
+    setError('');
+    setShake(false);
+    
+    const success = loginWithPin(fullPin);
+    if (success) {
+      setLoading(false);
+      navigate('/', { replace: true });
+    } else {
+      setLoading(false);
+      setError('Incorrect PIN. Please try again.');
+      setShake(true);
+      setPin(['', '', '', '']);
+      setTimeout(() => setShake(false), 500);
+      pinRefs.current[0]?.focus();
+    }
   };
 
   return (
@@ -76,15 +72,20 @@ export default function Login() {
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        animate={{ 
+          opacity: 1, 
+          y: 0,
+          x: shake ? [-10, 10, -10, 10, -5, 5, 0] : 0 
+        }}
+        transition={{ duration: shake ? 0.4 : 0.2 }}
         className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[32px] shadow-2xl relative z-10"
       >
         <div className="text-center mb-8">
           <div className="text-2xl font-bold tracking-widest text-white mb-2">SMARTLEDGER</div>
-          <h1 className="text-xl font-semibold text-white/90">
-            {isLogin ? 'Welcome Back' : 'Create Account'}
-          </h1>
-          <p className="text-slate-400 text-sm mt-2">Sign in to access your dashboard</p>
+          <h1 className="text-xl font-semibold text-white/90">Enter PIN</h1>
+          <p className="text-slate-400 text-sm mt-2">
+            Enter your 4-digit PIN to continue
+          </p>
         </div>
 
         {error && (
@@ -93,56 +94,41 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleEmailAuth} className="space-y-4">
-          <div>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-neutral-900/50 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-              required
-            />
-          </div>
-          <div>
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-900/50 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-              required
-            />
+        <motion.div
+          key="pin-form"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.2 }}
+          className="space-y-6"
+        >
+          <div className="flex justify-center gap-4">
+            {pin.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { pinRefs.current[i] = el; }}
+                type="password"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handlePinChange(i, e.target.value)}
+                onKeyDown={(e) => handlePinKeyDown(i, e)}
+                className={cn(
+                  "w-14 h-16 bg-neutral-900/50 border rounded-2xl text-center text-2xl text-white font-medium focus:outline-none transition-all",
+                  digit ? "border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.2)]" : "border-white/10 focus:border-indigo-500"
+                )}
+              />
+            ))}
           </div>
           
-          {isLogin && (
-            <div className="text-right">
-              <button type="button" className="text-indigo-400 text-sm hover:text-indigo-300 transition-colors">
-                Forgot Password?
-              </button>
-            </div>
-          )}
-
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl py-3 font-medium transition-colors flex items-center justify-center"
+            type="button"
+            disabled={loading || pin.some(p => p === '')}
+            onClick={() => handlePinSubmit(pin.join(''))}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white rounded-2xl py-3 font-medium transition-colors flex items-center justify-center h-[52px]"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isLogin ? 'Sign In' : 'Create Account')}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Unlock Wallet'}
           </button>
-        </form>
-
-        <div className="mt-8 text-center">
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-slate-400 hover:text-white transition-colors text-sm"
-          >
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <span className="text-indigo-400 font-medium">
-              {isLogin ? 'Create Account' : 'Sign In'}
-            </span>
-          </button>
-        </div>
+        </motion.div>
       </motion.div>
     </div>
   );

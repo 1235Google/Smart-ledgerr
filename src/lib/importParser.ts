@@ -1,5 +1,4 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { Transaction, ReceivedMoney, SentMoney, PendingMoney } from '../types';
 
 export interface ImportRecordError {
@@ -24,7 +23,7 @@ export interface ImportParseResult {
   invalidCount: number;
   records: ProcessedImportRecord[];
   errors: ImportRecordError[];
-  fileType: 'csv' | 'xlsx' | 'xls' | 'json';
+  fileType: 'csv' | 'json';
   fileName: string;
 }
 
@@ -58,18 +57,6 @@ function parseDateValue(val: any): string {
     return new Date().toISOString().split('T')[0];
   }
   
-  // Excel Serial Date number check (e.g. 45123)
-  if (typeof val === 'number') {
-    if (val > 25000 && val < 70000) {
-      const utcDays = Math.floor(val - 25569);
-      const utcValue = utcDays * 86400;
-      const dateObj = new Date(utcValue * 1000);
-      if (!isNaN(dateObj.getTime())) {
-        return dateObj.toISOString().split('T')[0];
-      }
-    }
-  }
-
   const str = String(val).trim();
   if (!str) return new Date().toISOString().split('T')[0];
 
@@ -251,7 +238,7 @@ export async function parseImportFile(
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
 
   let rawRows: any[] = [];
-  let detectedType: 'csv' | 'xlsx' | 'xls' | 'json' = 'csv';
+  let detectedType: 'csv' | 'json' = 'csv';
 
   onProgress?.(10, 'Reading file contents...');
 
@@ -295,23 +282,7 @@ export async function parseImportFile(
     rawRows = papaRes.data;
 
   } else if (ext === 'xlsx' || ext === 'xls' || file.type.includes('spreadsheet') || file.type.includes('excel')) {
-    detectedType = ext === 'xls' ? 'xls' : 'xlsx';
-    const arrayBuffer = await file.arrayBuffer();
-    const dataUint8 = new Uint8Array(arrayBuffer);
-    
-    let workbook: XLSX.WorkBook;
-    try {
-      workbook = XLSX.read(dataUint8, { type: 'array', cellDates: true, raw: false });
-    } catch (err: any) {
-      throw new Error(`Failed to parse Excel file: ${err?.message || 'Unsupported format'}`);
-    }
-
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) throw new Error('Excel workbook contains no sheets.');
-    
-    const worksheet = workbook.Sheets[sheetName];
-    rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-
+    throw new Error('Excel files are currently not supported due to memory constraints. Please upload CSV or JSON.');
   } else {
     // Fallback detection using text/arrayBuffer checks
     const text = await file.text();
@@ -328,7 +299,7 @@ export async function parseImportFile(
         detectedType = 'csv';
         rawRows = papaRes.data;
       } else {
-        throw new Error('Unsupported file extension and type. Please upload a CSV, XLSX, XLS, or JSON file.');
+        throw new Error('Unsupported file extension and type. Please upload a CSV, or JSON file.');
       }
     }
   }

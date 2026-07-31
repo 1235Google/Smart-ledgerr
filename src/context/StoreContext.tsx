@@ -7,6 +7,7 @@ import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { loadStateFromCloud, syncStateToCloud } from "../lib/cloudSync";
+import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -82,6 +83,7 @@ interface StoreContextType extends AppState {
   isLocked: boolean;
   unlockApp: (pin: string) => boolean;
   lockApp: () => void;
+  loginWithPin: (pin: string) => boolean;
   currentUser: User | null;
   isAuthenticated: boolean;
   logout: () => Promise<void>;
@@ -171,16 +173,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
   const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('smartledger_authenticated') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const prevStateRef = React.useRef<AppState>(defaultState);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      setIsAuthenticated(!!user);
       
       if (user) {
+        setIsAuthenticated(true);
+        try {
+          localStorage.setItem('smartledger_authenticated', 'true');
+        } catch (e) {}
         setIsLoading(true);
         const loadedState = await loadStateFromCloud(user.uid, defaultState);
         setState(loadedState);
@@ -188,8 +199,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIsDataLoaded(true);
         setIsLoading(false);
       } else {
-        setState(defaultState);
-        prevStateRef.current = defaultState;
+        const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
+        setIsAuthenticated(isLocallyAuth);
         setIsDataLoaded(true);
         setIsLoading(false);
       }
@@ -204,18 +215,47 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, isAuthenticated, currentUser, isDataLoaded]);
 
+  const loginWithPin = (pin: string): boolean => {
+    if (!pin || pin.length !== 4) return false;
+    const hashedPin = CryptoJS.SHA256(pin).toString();
+    const configuredPin = state.securitySettings.pin;
+    
+    const isCorrect = configuredPin ? (configuredPin === hashedPin || configuredPin === pin) : true;
+    if (isCorrect) {
+      setIsAuthenticated(true);
+      setIsLocked(false);
+      try {
+        localStorage.setItem('smartledger_authenticated', 'true');
+      } catch (e) {}
+      createNotification({
+        title: 'Account Unlocked',
+        message: 'Successfully authenticated session with SmartLedger',
+        type: 'auth_google_login'
+      });
+      return true;
+    }
+    return false;
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
-      // Clear local storage and state when logging out
-      localStorage.removeItem('smart-ledger-data');
-      setState(defaultState);
-      prevStateRef.current = defaultState;
-      setCurrentUser(null);
-      setIsAuthenticated(false);
     } catch (err) {
       console.error("Logout failed", err);
     }
+    createNotification({
+      title: 'Google Account Logged Out',
+      message: 'Logged out of SmartLedger',
+      type: 'auth_google_logout'
+    });
+    try {
+      localStorage.removeItem('smartledger_authenticated');
+      localStorage.removeItem('smart-ledger-data');
+    } catch (e) {}
+    setState(defaultState);
+    prevStateRef.current = defaultState;
+    setCurrentUser(null);
+    setIsAuthenticated(false);
   };
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -229,13 +269,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [isInitialized, state.securitySettings.pinEnabled]);
 
   const unlockApp = (pin: string) => {
-    // Simple hashing simulation
+    if (!pin || pin.length !== 4) return false;
     const hashedPin = CryptoJS.SHA256(pin).toString();
-    if (state.securitySettings.pin === hashedPin) {
+    const configuredPin = state.securitySettings.pin;
+    
+    if (configuredPin) {
+      if (configuredPin === hashedPin || configuredPin === pin) {
+        setIsLocked(false);
+        return true;
+      }
+      return false;
+    } else {
       setIsLocked(false);
       return true;
     }
-    return false;
   };
 
   const lockApp = () => {
@@ -390,6 +437,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       securitySettings: { ...prev.securitySettings, ...settings }
     }));
+    if (settings.pin !== undefined) {
+      createNotification({
+        title: 'PIN Changed Successfully',
+        message: 'Security PIN has been updated',
+        type: 'auth_pin_changed'
+      });
+    } else {
+      createNotification({
+        title: 'Security Settings Updated',
+        message: 'Security settings updated',
+        type: 'security_settings_updated'
+      });
+    }
   };
 
   const updateEmailSettings = (settings: Partial<EmailSettings>) => {
@@ -489,6 +549,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       generatedReports: [newReport, ...(prev.generatedReports || [])]
     }));
+    createNotification({
+      title: 'Monthly Report Generated',
+      message: `Generated report for ${report.month || 'selected period'}`,
+      type: 'report_generated',
+      referenceId: newReport.id
+    });
   };
 
   const deleteGeneratedReport = (id: string) => {
@@ -532,6 +598,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       type: 'received',
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    createNotification({
+      title: 'Income Added',
+      message: `Received ₹${Number(entry.amount).toLocaleString()} from ${entry.personName}`,
+      type: 'ledger_income_added',
+      referenceId: newTx.id
+    });
+    createNotification({
+      title: 'New Transaction Added',
+      message: `Added income entry of ₹${Number(entry.amount).toLocaleString()}`,
+      type: 'ledger_transaction_added',
+      referenceId: newTx.id
+    });
   };
 
   const addSentMoney = (entry: Omit<SentMoney, 'id' | 'type'>) => {
@@ -541,6 +619,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       type: 'sent',
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    createNotification({
+      title: 'Expense Added',
+      message: `Sent ₹${Number(entry.amount).toLocaleString()} to ${entry.personName}`,
+      type: 'ledger_expense_added',
+      referenceId: newTx.id
+    });
+    createNotification({
+      title: 'New Transaction Added',
+      message: `Added expense entry of ₹${Number(entry.amount).toLocaleString()}`,
+      type: 'ledger_transaction_added',
+      referenceId: newTx.id
+    });
   };
 
   const addPendingMoney = (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
@@ -553,6 +643,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       nextReminderDate: entry.dueDate || new Date().toISOString().split('T')[0],
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    createNotification({
+      title: 'Pending Payment Created',
+      message: `Pending payment of ₹${Number(entry.amount).toLocaleString()} created for ${entry.personName}`,
+      type: 'pending_created',
+      referenceId: newTx.id
+    });
   };
 
   const toggleReminderStatus = (id: string) => {
@@ -592,9 +688,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const markAsReceived = (id: string) => {
+    let targetTx: PendingMoney | undefined;
     setState(prev => {
       const tx = prev.transactions.find(t => t.id === id);
       if (!tx || tx.type !== 'pending') return prev;
+      targetTx = tx;
 
       const updatedTx: PendingMoney = { ...tx, status: 'completed' };
       
@@ -615,6 +713,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         ]
       };
     });
+    if (targetTx) {
+      createNotification({
+        title: 'Pending Payment Marked as Paid',
+        message: `Payment of ₹${Number(targetTx.amount).toLocaleString()} from ${targetTx.personName} marked as paid`,
+        type: 'pending_paid',
+        referenceId: id
+      });
+    }
   };
 
   const deleteTransaction = (id: string) => {
@@ -622,6 +728,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       transactions: prev.transactions.filter(t => t.id !== id)
     }));
+    createNotification({
+      title: 'Transaction Deleted',
+      message: 'Transaction removed from ledger',
+      type: 'ledger_transaction_deleted',
+      referenceId: id
+    });
   };
 
   const updateTransaction = (id: string, updated: Partial<Transaction>) => {
@@ -629,6 +741,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       transactions: prev.transactions.map(t => t.id === id ? { ...t, ...updated } as Transaction : t)
     }));
+    createNotification({
+      title: 'Transaction Edited',
+      message: 'Transaction details updated in ledger',
+      type: 'ledger_transaction_edited',
+      referenceId: id
+    });
   };
 
   const addGullakEntry = (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -738,6 +856,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       reminderHistory: [newLog, ...(prev.reminderHistory || [])]
     }));
+    createNotification({
+      title: 'Reminder Sent Successfully',
+      message: `Payment reminder sent to ${log.customerName || 'recipient'}`,
+      type: 'pending_reminder_sent',
+      referenceId: newLog.id
+    });
   };
 
   const updateCustomReminderTemplate = (template: string) => {
@@ -752,6 +876,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       userProfile: { ...(prev.userProfile || defaultState.userProfile!), ...profile }
     }));
+    createNotification({
+      title: 'Profile Updated Successfully',
+      message: 'Your profile information has been updated',
+      type: 'auth_profile_updated'
+    });
   };
 
   const resetData = () => {
@@ -765,6 +894,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const importData = (data: AppState) => {
     setState(data);
+    createNotification({
+      title: 'Import Completed',
+      message: 'Ledger data imported successfully',
+      type: 'report_import_completed'
+    });
   };
 
   const receivedTransactions = state.transactions.filter((t): t is ReceivedMoney => t.type === 'received');
@@ -840,6 +974,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isLocked,
       unlockApp,
       lockApp,
+      loginWithPin,
       currentUser,
       isAuthenticated,
       logout,

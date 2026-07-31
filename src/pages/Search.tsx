@@ -25,7 +25,7 @@ export default function Search() {
   }, [query, transactions]);
 
   return (
-    <div className="space-y-8 pb-20 md:pb-0 max-w-4xl mx-auto">
+    <div className="w-full space-y-8">
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-white flex items-center gap-3">
           <SearchIcon className="text-blue-400" />

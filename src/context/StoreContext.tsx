@@ -167,13 +167,7 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(() => {
-    try {
-      const saved = localStorage.getItem('smart-ledger-data');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return defaultState;
-  });
+  const [state, setState] = useState<AppState>(defaultState);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
@@ -210,19 +204,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setIsLoading(false);
         });
       } else {
-        const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
-        setIsAuthenticated(isLocallyAuth);
-        
-        // Load from local if not authenticated
+        setIsAuthenticated(false);
         try {
-          const saved = localStorage.getItem('smart-ledger-data');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setState(parsed);
-            prevStateRef.current = parsed;
-          }
+          localStorage.removeItem('smartledger_authenticated');
         } catch (e) {}
-
+        
         setIsDataLoaded(true);
         setIsLoading(false);
       }
@@ -237,10 +223,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (isDataLoaded) {
       if (isAuthenticated && currentUser) {
         syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
-      } else {
-        localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+        prevStateRef.current = state;
       }
-      prevStateRef.current = state;
     }
   }, [state, isAuthenticated, currentUser, isDataLoaded]);
 
@@ -279,7 +263,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     try {
       localStorage.removeItem('smartledger_authenticated');
-      localStorage.removeItem('smart-ledger-data');
     } catch (e) {}
     setState(defaultState);
     prevStateRef.current = defaultState;
@@ -914,11 +897,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const resetData = () => {
     setState(defaultState);
-    try {
-      localStorage.removeItem('smart-ledger-data');
-    } catch (e) {
-      console.error("[StoreContext] Error clearing storage key:", e);
-    }
   };
 
   const importData = (data: AppState) => {

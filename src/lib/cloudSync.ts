@@ -57,8 +57,10 @@ export const loadStateFromCloud = async (userId: string, defaultState: AppState)
 
 export const syncStateToCloud = async (userId: string, previousState: AppState, currentState: AppState): Promise<void> => {
   try {
+    console.log("[cloudSync] Syncing state...", { userId, previousState, currentState });
     // Check if transactions changed to sync only those
     if (JSON.stringify(previousState.transactions) !== JSON.stringify(currentState.transactions)) {
+      console.log("[cloudSync] Transactions changed, syncing...");
       const txRef = collection(db, 'users', userId, 'transactions');
       let batch = writeBatch(db);
       let count = 0;
@@ -81,9 +83,15 @@ export const syncStateToCloud = async (userId: string, previousState: AppState, 
     const stateToSave = { ...currentState };
     delete (stateToSave as any).transactions;
     
-    if (JSON.stringify(previousState) !== JSON.stringify(currentState)) {
+    // Create a version without transactions for comparison
+    const prevStateToSave = { ...previousState };
+    delete (prevStateToSave as any).transactions;
+
+    if (JSON.stringify(prevStateToSave) !== JSON.stringify(stateToSave)) {
+        console.log("[cloudSync] State changed, syncing...");
         const docRef = doc(db, 'users', userId, 'app', 'state');
         await setDoc(docRef, stateToSave, { merge: true });
+        console.log("[cloudSync] State synced.");
     }
   } catch (error) {
     console.error("Error syncing state to cloud:", error);

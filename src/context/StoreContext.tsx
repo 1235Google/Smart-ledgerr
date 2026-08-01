@@ -576,8 +576,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const setStartingBalance = (amount: number) => {
+  const setStartingBalance = async (amount: number) => {
+    console.log("[StoreContext] Setting starting balance:", amount);
     setState(prev => ({ ...prev, startingBalance: amount, isSetupComplete: true }));
+    if (isAuthenticated && currentUser) {
+      console.log("[StoreContext] Syncing starting balance...");
+      await syncStateToCloud(currentUser.uid, state, { ...state, startingBalance: amount });
+    }
   };
 
   const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {

@@ -6,7 +6,7 @@ import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { loadStateFromCloud, syncStateToCloud } from "../lib/cloudSync";
+import { subscribeToState, syncStateToCloud } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -167,7 +167,13 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(defaultState);
+  const [state, setState] = useState<AppState>(() => {
+    try {
+      const saved = localStorage.getItem('smart-ledger-data');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return defaultState;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
@@ -184,8 +190,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
+    let unsubscribeFirestore: (() => void) | undefined;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+
+      if (unsubscribeFirestore) unsubscribeFirestore();
       
       if (user) {
         setIsAuthenticated(true);
@@ -193,24 +202,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
         setIsLoading(true);
-        const loadedState = await loadStateFromCloud(user.uid, defaultState);
-        setState(loadedState);
-        prevStateRef.current = loadedState;
-        setIsDataLoaded(true);
-        setIsLoading(false);
+        
+        unsubscribeFirestore = subscribeToState(user.uid, (newState) => {
+          setState(newState);
+          prevStateRef.current = newState;
+          setIsDataLoaded(true);
+          setIsLoading(false);
+        });
       } else {
         const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
         setIsAuthenticated(isLocallyAuth);
+        
+        // Load from local if not authenticated
+        try {
+          const saved = localStorage.getItem('smart-ledger-data');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setState(parsed);
+            prevStateRef.current = parsed;
+          }
+        } catch (e) {}
+
         setIsDataLoaded(true);
         setIsLoading(false);
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && currentUser && isDataLoaded) {
-      syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
+    if (isDataLoaded) {
+      if (isAuthenticated && currentUser) {
+        syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
+      } else {
+        localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+      }
       prevStateRef.current = state;
     }
   }, [state, isAuthenticated, currentUser, isDataLoaded]);

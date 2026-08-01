@@ -351,10 +351,10 @@ export default function Gullak() {
                   <motion.circle 
                     cx="50" cy="50" r="46" fill="transparent" 
                     stroke="url(#gradient)" strokeWidth="8" strokeLinecap="round"
-                    strokeDasharray="289.02" strokeDashoffset={289.02 - (289.02 * progress) / 100}
+                    strokeDasharray="289.02"
                     initial={{ strokeDashoffset: 289.02 }}
                     animate={{ strokeDashoffset: 289.02 - (289.02 * progress) / 100 }}
-                    transition={{ duration: 1.5, ease: "easeOut" }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
                   />
                   <defs>
                     <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">

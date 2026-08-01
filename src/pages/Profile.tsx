@@ -76,16 +76,35 @@ export default function Profile() {
   const [tempGoalInput, setTempGoalInput] = useState(goalAmount.toString());
 
   // Financial calculations
-  const totalCustomers = customers ? customers.length : 24;
-  const activeCustomers = customers ? customers.filter(c => (c as any).status === 'active').length : 19;
-  const totalReceived = transactions ? transactions.filter(t => t.type === 'received').reduce((sum, t) => sum + (t.amount || 0), 0) : 482500;
-  const totalPending = transactions ? transactions.filter(t => t.type === 'pending').reduce((sum, t) => sum + (t.amount || 0), 0) : 48400;
-  const collectionRate = 91.2;
-  const recoveryRate = 96.5;
-  const avgMonthlyIncome = 125000;
-  const largestTransaction = 75000;
-  const fastestPayment = '12 Minutes';
-  const currentStreak = 30;
+  const totalCustomers = customers ? customers.length : 0;
+  const activeCustomersList = customers ? customers.filter(c => transactions?.some(t => t.personName === c.name)) : [];
+  const activeCustomers = activeCustomersList.length;
+  const totalReceived = transactions ? transactions.filter(t => t.type === 'received').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
+  const totalPending = transactions ? transactions.filter(t => t.type === 'pending' && t.status === 'pending').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
+  const totalPendingCreated = transactions ? transactions.filter(t => t.type === 'pending').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
+  const recoveredPayments = transactions ? transactions.filter(t => t.type === 'received' && t.purpose?.includes('Settled')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
+
+  const collectionRate = (totalReceived + totalPending) > 0 ? Math.round((totalReceived / (totalReceived + totalPending)) * 100) : 0;
+  const recoveryRate = totalPendingCreated > 0 ? Math.round((recoveredPayments / totalPendingCreated) * 100) : 0;
+  
+  // Calculate average monthly income
+  const completedTransactions = transactions ? transactions.filter(t => t.type === 'received') : [];
+  const monthlyIncomes: { [key: string]: number } = {};
+  completedTransactions.forEach(t => {
+      const month = t.date.substring(0, 7);
+      monthlyIncomes[month] = (monthlyIncomes[month] || 0) + Number(t.amount);
+  });
+  const incomeValues = Object.values(monthlyIncomes);
+  const avgMonthlyIncome = incomeValues.length > 0 ? Math.round(incomeValues.reduce((a, b) => a + b, 0) / incomeValues.length) : 0;
+
+  // Trend calculations (simplified: current month vs previous)
+  const currentMonth = new Date().toISOString().substring(0, 7);
+  const prevMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().substring(0, 7);
+  
+  const getIncomeForMonth = (month: string) => completedTransactions.filter(t => t.date.startsWith(month)).reduce((sum, t) => sum + Number(t.amount), 0);
+  const prevIncome = getIncomeForMonth(prevMonth);
+  const currIncome = getIncomeForMonth(currentMonth);
+  const incomeTrend = prevIncome > 0 ? Math.round(((currIncome - prevIncome) / prevIncome) * 100) : 0;
 
   // Auto-calculated current savings from SmartLedger balance (Net = Received - Pending)
   const currentSavings = Math.max(0, totalReceived - totalPending);
@@ -305,12 +324,12 @@ export default function Profile() {
         {/* SIX PREMIUM GLASS CARDS IN RESPONSIVE 3x2 GRID (3 Cols Desktop, 2 Cols Tablet, 1 Col Mobile) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
           {[
-            { title: 'Total Received', value: `₹${totalReceived.toLocaleString()}`, change: '+18.4%', icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
-            { title: 'Total Pending', value: `₹${totalPending.toLocaleString()}`, change: '-4.2%', icon: ArrowUpRight, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-            { title: 'Active Customers', value: `${activeCustomers} / ${totalCustomers}`, change: '84% Active', icon: User, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
+            { title: 'Total Received', value: `₹${totalReceived.toLocaleString()}`, change: `${incomeTrend >= 0 ? '+' : ''}${incomeTrend}%`, icon: ArrowDownLeft, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+            { title: 'Total Pending', value: `₹${totalPending.toLocaleString()}`, change: 'Active', icon: ArrowUpRight, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
+            { title: 'Active Customers', value: `${activeCustomers} / ${totalCustomers}`, change: totalCustomers > 0 ? `${Math.round((activeCustomers/totalCustomers)*100)}% Active` : '0% Active', icon: User, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
             { title: 'Collection Rate', value: `${collectionRate}%`, change: 'Optimal', icon: TrendingUp, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
             { title: 'Recovery Rate', value: `${recoveryRate}%`, change: 'High Trust', icon: ShieldCheck, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-            { title: 'Avg Monthly Income', value: `₹${avgMonthlyIncome.toLocaleString()}`, change: '+8.1%', icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+            { title: 'Avg Monthly Income', value: `₹${avgMonthlyIncome.toLocaleString()}`, change: `${incomeTrend >= 0 ? '+' : ''}${incomeTrend}%`, icon: Wallet, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
           ].map((card, idx) => {
             const Icon = card.icon;
             return (

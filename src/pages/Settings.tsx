@@ -11,6 +11,7 @@ import ChangePinModal from '../components/ChangePinModal';
 import SettingsSection from '../components/settings/SettingsSection';
 import SettingsItem from '../components/settings/SettingsItem';
 import Switch from '../components/settings/Switch';
+
 import IdentityCard from '../components/IdentityCard';
 
 export default function Settings() {
@@ -120,12 +121,6 @@ export default function Settings() {
                 <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
             </div>
 
-            {/* Profile Card */}
-            <div className="mb-10">
-              <IdentityCard />
-            </div>
-
-            {/* Sticky Search */}
             <div className="sticky top-4 z-10 mb-8">
                 <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/80 backdrop-blur-xl border border-white/5 rounded-[18px] focus-within:border-indigo-500/50 transition-all">
                     <Search className="text-slate-500" size={20}/>

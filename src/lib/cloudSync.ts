@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { AppState, Transaction } from '../types';
 

@@ -167,13 +167,7 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(() => {
-    try {
-      const saved = localStorage.getItem('smart-ledger-data');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return defaultState;
-  });
+  const [state, setState] = useState<AppState>(defaultState);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);

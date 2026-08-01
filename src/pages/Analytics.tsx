@@ -136,17 +136,49 @@ export default function Analytics() {
 
   // Net Worth Calculation
   const netWorth = useMemo(() => {
-    const assets = currentBalance + savingsGoals.reduce((sum, g) => sum + g.savedAmount, 0);
+    const assets = income; // Simplified for this example based on available variables
     const liabilities = pendingAmount;
     return {
         assets,
         liabilities,
         netWorth: assets - liabilities
     };
-  }, [currentBalance, savingsGoals, pendingAmount]);
+  }, [income, pendingAmount]);
 
-  // Financial Time Machine
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  // Trend Calculation
+  const netWorthTrend = useMemo(() => {
+    const now = new Date();
+    const currMonth = now.getMonth();
+    const currYear = now.getFullYear();
+    const prevMonth = currMonth === 0 ? 11 : currMonth - 1;
+    const prevYear = currMonth === 0 ? currYear - 1 : currYear;
+
+    const getNetWorthForMonth = (month: number, year: number) => {
+        const monthTransactions = transactions.filter(t => {
+            const date = parseISO(t.type === 'pending' ? t.dueDate : t.date);
+            return date.getMonth() === month && date.getFullYear() === year;
+        });
+        const income = monthTransactions.filter(t => t.type === 'received').reduce((sum, t) => sum + t.amount, 0);
+        const expenses = monthTransactions.filter(t => t.type === 'sent').reduce((sum, t) => sum + t.amount, 0);
+        return income - expenses;
+    };
+
+    const currentNetWorth = getNetWorthForMonth(currMonth, currYear);
+    const prevNetWorth = getNetWorthForMonth(prevMonth, prevYear);
+    
+    return prevNetWorth !== 0 ? ((currentNetWorth - prevNetWorth) / Math.abs(prevNetWorth)) * 100 : 0;
+  }, [transactions]);
+
+
+  const healthScore = useMemo(() => {
+    let score = 100;
+    if (pendingAmount > income * 0.3) score -= 20;
+    if (expenses > income) score -= 30;
+    if (income === 0) score -= 50;
+    return Math.max(0, Math.min(100, score));
+  }, [pendingAmount, income, expenses]);
+
+  const forecast = Math.round(income * 1.1);
 
   return (
     <div className="w-full space-y-8 print:text-black">
@@ -174,7 +206,9 @@ export default function Analytics() {
             <div>
                 <p className="text-neutral-400 text-sm">Total Net Worth</p>
                 <p className="text-4xl font-bold text-white mt-1">{formatCurrency(netWorth.netWorth)}</p>
-                <p className="text-emerald-400 text-sm mt-2">↑ 12% vs last month</p>
+                <p className={cn("text-sm mt-2", netWorthTrend >= 0 ? "text-emerald-400" : "text-red-400")}>
+                    {netWorthTrend >= 0 ? '↑' : '↓'} {Math.abs(Math.round(netWorthTrend))}% vs last month
+                </p>
             </div>
             <div>
                 <p className="text-neutral-400 text-sm">Assets</p>
@@ -204,16 +238,16 @@ export default function Analytics() {
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
             <h2 className="text-lg font-bold text-white mb-4">Financial Health Score</h2>
             <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full border-4 border-emerald-500 flex items-center justify-center font-bold text-2xl text-white">82</div>
+            <div className={cn("w-24 h-24 rounded-full border-4 flex items-center justify-center font-bold text-2xl text-white", healthScore > 75 ? "border-emerald-500" : healthScore > 50 ? "border-amber-500" : "border-red-500")}>{Math.round(healthScore)}</div>
             <div>
-                <p className="font-bold text-white">Excellent</p>
-                <p className="text-sm text-neutral-400">✓ Good saving habits<br/>⚠ High food expenses</p>
+                <p className="font-bold text-white">{healthScore > 75 ? 'Excellent' : healthScore > 50 ? 'Good' : 'Needs Attention'}</p>
+                <p className="text-sm text-neutral-400">{healthScore > 75 ? 'Excellent financial management' : healthScore > 50 ? 'Good progress' : 'Improvement needed'}</p>
             </div>
             </div>
         </div>
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
             <h2 className="text-lg font-bold text-white mb-4">Financial Forecast</h2>
-            <p className="text-neutral-300">Based on your saving pattern, 30-day forecast: <span className="font-bold text-white">{formatCurrency(currentBalance * 1.2)}</span></p>
+            <p className="text-neutral-300">Based on your saving pattern, 30-day forecast: <span className="font-bold text-white">{formatCurrency(forecast)}</span></p>
         </div>
       </div>
 

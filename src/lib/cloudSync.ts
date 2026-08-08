@@ -461,6 +461,7 @@ export const syncStateToCloud = async (
 
     // 4. Overall state sync
     await saveAppStateToFirestore(userId, currentState);
+    console.log(`[CloudSync Persistence SUCCESS] User ${userId} synchronized successfully to Firestore.`);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
   }

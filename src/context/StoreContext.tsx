@@ -101,7 +101,7 @@ export const defaultState: AppState = {
   investments: [],
   financeHabits: [],
   gullakSettings: {
-    monthlyGoal: 0,
+    monthlyGoal: 10000,
   },
   securitySettings: {
     pinEnabled: false,
@@ -188,39 +188,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
 
-      if (unsubscribeFirestore) unsubscribeFirestore();
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = undefined;
+      }
       
       if (user) {
         setIsAuthenticated(true);
+        setIsLoading(true);
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
-        setIsLoading(true);
         
-        unsubscribeFirestore = subscribeToState(user.uid, (newState) => {
+        unsubscribeFirestore = subscribeToState(user.uid, user, defaultState, (newState) => {
           setState(newState);
           prevStateRef.current = newState;
           setIsDataLoaded(true);
           setIsLoading(false);
         });
       } else {
-        const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
-        setIsAuthenticated(isLocallyAuth);
-        
-        // Load from local if not authenticated
+        setIsAuthenticated(false);
         try {
-          const saved = localStorage.getItem('smart-ledger-data');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setState(parsed);
-            prevStateRef.current = parsed;
-          }
+          localStorage.removeItem('smartledger_authenticated');
+          localStorage.removeItem('smart-ledger-data');
         } catch (e) {}
 
+        setState(defaultState);
+        prevStateRef.current = defaultState;
         setIsDataLoaded(true);
         setIsLoading(false);
       }
     });
+
     return () => {
       unsubscribe();
       if (unsubscribeFirestore) unsubscribeFirestore();

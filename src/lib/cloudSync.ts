@@ -1,6 +1,6 @@
 import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { AppState, Transaction, UserProfile, PendingMoney, ReceivedMoney } from '../types';
+import { AppState, Transaction, UserProfile, PendingMoney, ReceivedMoney, SentMoney, ReminderHistoryLog, GeneratedReport } from '../types';
 import { User } from 'firebase/auth';
 
 export enum OperationType {
@@ -107,18 +107,6 @@ export const initializeUserWorkspace = async (
       generalSettings: { timezone: 'Asia/Kolkata' },
       userProfile: profile
     }),
-    startingBalance: 0,
-    transactions: [],
-    customers: [],
-    gullakEntries: [],
-    savingsGoals: [],
-    securityLogs: [],
-    automationRules: [],
-    investments: [],
-    financeHabits: [],
-    emailHistory: [],
-    reminderHistory: [],
-    generatedReports: [],
     userProfile: profile,
     isSetupComplete: true
   };
@@ -129,7 +117,7 @@ export const initializeUserWorkspace = async (
     const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
     const settingsDocRef = doc(db, 'users', userId, 'settings', 'data');
 
-    // 1. Create root user document
+    // 1. Root user document
     await setDoc(userDocRef, {
       name: firebaseUser?.displayName || 'SmartLedger User',
       email: firebaseUser?.email || '',
@@ -141,7 +129,7 @@ export const initializeUserWorkspace = async (
     const stateToSave = { ...freshState };
     delete (stateToSave as any).transactions;
 
-    // 2. Initialize state, profile, and settings documents
+    // 2. Initialize state, profile, and settings documents safely with merge
     await setDoc(stateDocRef, stateToSave, { merge: true });
     await setDoc(profileDocRef, profile, { merge: true });
     await setDoc(settingsDocRef, {
@@ -157,11 +145,97 @@ export const initializeUserWorkspace = async (
   return freshState;
 };
 
+export const saveTransactionToFirestore = async (userId: string, tx: Transaction): Promise<void> => {
+  if (!userId || !tx || !tx.id) return;
+  try {
+    const txRef = doc(db, 'users', userId, 'transactions', tx.id);
+    await setDoc(txRef, tx, { merge: true });
+
+    if (tx.type === 'received') {
+      await setDoc(doc(db, 'users', userId, 'received', tx.id), tx, { merge: true });
+    } else if (tx.type === 'pending') {
+      await setDoc(doc(db, 'users', userId, 'pending', tx.id), tx, { merge: true });
+      await setDoc(doc(db, 'users', userId, 'pendingPayments', tx.id), tx, { merge: true });
+    } else if (tx.type === 'sent') {
+      await setDoc(doc(db, 'users', userId, 'sent', tx.id), tx, { merge: true });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/transactions/${tx.id}`);
+    throw error;
+  }
+};
+
+export const deleteTransactionFromFirestore = async (userId: string, txId: string, txType?: string): Promise<void> => {
+  if (!userId || !txId) return;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'transactions', txId));
+    if (!txType || txType === 'received') {
+      await deleteDoc(doc(db, 'users', userId, 'received', txId)).catch(() => {});
+    }
+    if (!txType || txType === 'pending') {
+      await deleteDoc(doc(db, 'users', userId, 'pending', txId)).catch(() => {});
+      await deleteDoc(doc(db, 'users', userId, 'pendingPayments', txId)).catch(() => {});
+    }
+    if (!txType || txType === 'sent') {
+      await deleteDoc(doc(db, 'users', userId, 'sent', txId)).catch(() => {});
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${userId}/transactions/${txId}`);
+    throw error;
+  }
+};
+
+export const saveUserProfileToFirestore = async (userId: string, profile: UserProfile): Promise<void> => {
+  if (!userId) return;
+  try {
+    const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
+    await setDoc(profileDocRef, profile, { merge: true });
+
+    const userDocRef = doc(db, 'users', userId);
+    await setDoc(userDocRef, {
+      name: profile.fullName,
+      email: profile.email,
+      photoURL: profile.profilePhoto || profile.businessLogo,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/profile`);
+  }
+};
+
+export const saveAppStateToFirestore = async (userId: string, state: AppState): Promise<void> => {
+  if (!userId) return;
+  try {
+    const stateDocRef = doc(db, 'users', userId, 'app', 'state');
+    const stateToSave = { ...state };
+    delete (stateToSave as any).transactions;
+    await setDoc(stateDocRef, stateToSave, { merge: true });
+
+    // Calculate and update current balance in users/{userId}/balances/current
+    const balanceDocRef = doc(db, 'users', userId, 'balances', 'current');
+    const receivedTransactions = (state.transactions || []).filter((t): t is ReceivedMoney => t.type === 'received');
+    const sentTransactions = (state.transactions || []).filter((t): t is SentMoney => t.type === 'sent');
+    const totalReceived = receivedTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const totalSent = sentTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+    const currentBalance = Number(state.startingBalance || 0) + totalReceived - totalSent;
+
+    await setDoc(balanceDocRef, {
+      startingBalance: state.startingBalance || 0,
+      totalReceived,
+      totalSent,
+      currentBalance,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/app/state`);
+  }
+};
+
 export const subscribeToState = (
   userId: string, 
   firebaseUser: User | null,
   baseDefaultState: AppState,
-  onUpdate: (state: AppState) => void
+  onUpdate: (state: AppState, isFromCloud?: boolean) => void
 ) => {
   const cacheKey = `smartledger_user_cache_${userId}`;
   let currentState: AppState = {
@@ -187,8 +261,8 @@ export const subscribeToState = (
     console.warn('Could not read user cache:', e);
   }
 
-  // Immediately notify listener so UI renders instantly without waiting for network
-  onUpdate(currentState);
+  // Notify initial local state immediately
+  onUpdate(currentState, false);
 
   const userDocRef = doc(db, 'users', userId);
   const stateDocRef = doc(db, 'users', userId, 'app', 'state');
@@ -231,6 +305,7 @@ export const subscribeToState = (
       emailSettings: settingsData?.emailSettings || stateDocData?.emailSettings || currentState.emailSettings || baseDefaultState.emailSettings,
       generalSettings: settingsData?.generalSettings || stateDocData?.generalSettings || currentState.generalSettings || baseDefaultState.generalSettings,
       gullakSettings: settingsData?.gullakSettings || stateDocData?.gullakSettings || currentState.gullakSettings || baseDefaultState.gullakSettings,
+      // IMPORTANT: preserve transactions if transactionsData hasn't emitted yet!
       transactions: transactionsData !== null ? transactionsData : (currentState.transactions || []),
       reminderHistory: reminderData !== null ? reminderData : (currentState.reminderHistory || []),
       generatedReports: reportsData !== null ? reportsData : (currentState.generatedReports || [])
@@ -240,7 +315,7 @@ export const subscribeToState = (
       localStorage.setItem(cacheKey, JSON.stringify(currentState));
     } catch (e) {}
 
-    onUpdate(currentState);
+    onUpdate(currentState, true);
   };
 
   const unsubState = onSnapshot(stateDocRef, (snapshot) => {
@@ -324,80 +399,34 @@ export const syncStateToCloud = async (
   if (!userId) return;
 
   try {
-    // 1. Transactions sync
+    // 1. Transactions sync: ONLY sync additions/updates, DO NOT BULK DELETE transactions unless user explicitly reset
     if (JSON.stringify(previousState.transactions) !== JSON.stringify(currentState.transactions)) {
-      const txRef = collection(db, 'users', userId, 'transactions');
-      const receivedRef = collection(db, 'users', userId, 'received');
-      const pendingRef = collection(db, 'users', userId, 'pending');
-
       const prevMap = new Map((previousState.transactions || []).map(t => [t.id, t]));
       const currMap = new Map((currentState.transactions || []).map(t => [t.id, t]));
-
-      let batch = writeBatch(db);
-      let count = 0;
 
       // Handle additions and updates
       for (const tx of currentState.transactions || []) {
         const prevTx = prevMap.get(tx.id);
         if (!prevTx || JSON.stringify(prevTx) !== JSON.stringify(tx)) {
-          batch.set(doc(txRef, tx.id), tx, { merge: true });
-          count++;
-
-          if (tx.type === 'received') {
-            batch.set(doc(receivedRef, tx.id), tx, { merge: true });
-            count++;
-          } else if (tx.type === 'pending') {
-            batch.set(doc(pendingRef, tx.id), tx, { merge: true });
-            count++;
-          }
-
-          if (count >= 400) {
-            await batch.commit();
-            batch = writeBatch(db);
-            count = 0;
-          }
+          await saveTransactionToFirestore(userId, tx);
         }
       }
 
-      // Handle deletions
-      for (const [id, prevTx] of prevMap.entries()) {
-        if (!currMap.has(id)) {
-          batch.delete(doc(txRef, id));
-          count++;
-          if (prevTx.type === 'received') {
-            batch.delete(doc(receivedRef, id));
-            count++;
-          } else if (prevTx.type === 'pending') {
-            batch.delete(doc(pendingRef, id));
-            count++;
-          }
-
-          if (count >= 400) {
-            await batch.commit();
-            batch = writeBatch(db);
-            count = 0;
+      // Handle explicit single deletions (only if currentState is NOT completely empty while previousState had multiple items)
+      // If currentState.transactions is empty but previousState had > 0, do NOT delete unless it's a deliberate single item removal or reset
+      if (currentState.transactions.length > 0 || previousState.transactions.length === 1) {
+        for (const [id, prevTx] of prevMap.entries()) {
+          if (!currMap.has(id)) {
+            await deleteTransactionFromFirestore(userId, id, prevTx.type);
           }
         }
-      }
-
-      if (count > 0) {
-        await batch.commit();
       }
     }
 
     // 2. Profile sync
     if (JSON.stringify(previousState.userProfile) !== JSON.stringify(currentState.userProfile)) {
       if (currentState.userProfile) {
-        const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
-        await setDoc(profileDocRef, currentState.userProfile, { merge: true });
-        
-        // Also update root user document
-        const userDocRef = doc(db, 'users', userId);
-        await setDoc(userDocRef, {
-          name: currentState.userProfile.fullName,
-          email: currentState.userProfile.email,
-          photoURL: currentState.userProfile.profilePhoto || currentState.userProfile.businessLogo
-        }, { merge: true });
+        await saveUserProfileToFirestore(userId, currentState.userProfile);
       }
     }
 
@@ -420,48 +449,8 @@ export const syncStateToCloud = async (
       await setDoc(settingsDocRef, currSettings, { merge: true });
     }
 
-    // 4. Reminders sync
-    if (JSON.stringify(previousState.reminderHistory) !== JSON.stringify(currentState.reminderHistory)) {
-      const remRef = collection(db, 'users', userId, 'reminders');
-      let batch = writeBatch(db);
-      let count = 0;
-      for (const r of currentState.reminderHistory || []) {
-        batch.set(doc(remRef, r.id), r, { merge: true });
-        count++;
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
-      }
-      if (count > 0) await batch.commit();
-    }
-
-    // 5. Reports sync
-    if (JSON.stringify(previousState.generatedReports) !== JSON.stringify(currentState.generatedReports)) {
-      const repRef = collection(db, 'users', userId, 'reports');
-      let batch = writeBatch(db);
-      let count = 0;
-      for (const rep of currentState.generatedReports || []) {
-        batch.set(doc(repRef, rep.id), rep, { merge: true });
-        count++;
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
-      }
-      if (count > 0) await batch.commit();
-    }
-
-    // 6. Overall state sync
-    const stateToSave = { ...currentState };
-    delete (stateToSave as any).transactions;
-
-    if (JSON.stringify(previousState) !== JSON.stringify(currentState)) {
-      const docRef = doc(db, 'users', userId, 'app', 'state');
-      await setDoc(docRef, stateToSave, { merge: true });
-    }
+    // 4. Overall state sync
+    await saveAppStateToFirestore(userId, currentState);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
   }

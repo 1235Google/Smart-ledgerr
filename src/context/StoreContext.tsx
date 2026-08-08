@@ -6,7 +6,7 @@ import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { subscribeToState, syncStateToCloud } from "../lib/cloudSync";
+import { subscribeToState, syncStateToCloud, saveTransactionToFirestore, deleteTransactionFromFirestore, saveUserProfileToFirestore, saveAppStateToFirestore } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -181,6 +181,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const prevStateRef = React.useRef<AppState>(defaultState);
+  const isSnapshotUpdateRef = React.useRef<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
@@ -218,10 +219,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setIsDataLoaded(true);
         }, 5000);
 
-        unsubscribeFirestore = subscribeToState(user.uid, user, defaultState, (newState) => {
+        unsubscribeFirestore = subscribeToState(user.uid, user, defaultState, (newState, isFromCloud) => {
           if (safetyTimeout) {
             clearTimeout(safetyTimeout);
             safetyTimeout = null;
+          }
+          if (isFromCloud) {
+            isSnapshotUpdateRef.current = true;
           }
           console.log('[Lifecycle] Firestore Loaded - Dashboard Ready');
           setState(newState);
@@ -254,6 +258,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isDataLoaded) {
+      if (isSnapshotUpdateRef.current) {
+        isSnapshotUpdateRef.current = false;
+        prevStateRef.current = state;
+        return;
+      }
       if (isAuthenticated && currentUser) {
         syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
       } else {
@@ -612,8 +621,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const setStartingBalance = (amount: number) => {
-    setState(prev => ({ ...prev, startingBalance: amount, isSetupComplete: true }));
+  const setStartingBalance = async (amount: number) => {
+    setState(prev => {
+      const nextState = { ...prev, startingBalance: amount, isSetupComplete: true };
+      if (currentUser?.uid) {
+        saveAppStateToFirestore(currentUser.uid, nextState).catch(e => console.error(e));
+      }
+      return nextState;
+    });
   };
 
   const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {
@@ -639,13 +654,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const addReceivedMoney = (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
+  const addReceivedMoney = async (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
     const newTx: ReceivedMoney = {
       ...entry,
       id: crypto.randomUUID(),
       type: 'received',
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    if (currentUser?.uid) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, newTx);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+      } catch (err) {
+        console.error("Error writing income to Firestore:", err);
+      }
+    }
     createNotification({
       title: 'Income Added',
       message: `Received ₹${Number(entry.amount).toLocaleString()} from ${entry.personName}`,
@@ -660,13 +683,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addSentMoney = (entry: Omit<SentMoney, 'id' | 'type'>) => {
+  const addSentMoney = async (entry: Omit<SentMoney, 'id' | 'type'>) => {
     const newTx: SentMoney = {
       ...entry,
       id: crypto.randomUUID(),
       type: 'sent',
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    if (currentUser?.uid) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, newTx);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+      } catch (err) {
+        console.error("Error writing expense to Firestore:", err);
+      }
+    }
     createNotification({
       title: 'Expense Added',
       message: `Sent ₹${Number(entry.amount).toLocaleString()} to ${entry.personName}`,
@@ -681,7 +712,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addPendingMoney = (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
+  const addPendingMoney = async (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
     const newTx: PendingMoney = {
       ...entry,
       id: crypto.randomUUID(),
@@ -691,6 +722,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       nextReminderDate: entry.dueDate || new Date().toISOString().split('T')[0],
     };
     setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    if (currentUser?.uid) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, newTx);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+      } catch (err) {
+        console.error("Error writing pending money to Firestore:", err);
+      }
+    }
     createNotification({
       title: 'Pending Payment Created',
       message: `Pending payment of ₹${Number(entry.amount).toLocaleString()} created for ${entry.personName}`,
@@ -704,7 +743,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          return { ...t, reminderStatus: t.reminderStatus === 'active' ? 'paused' : 'active' };
+          const updated = { ...t, reminderStatus: t.reminderStatus === 'active' ? 'paused' : 'active' } as PendingMoney;
+          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
+          return updated;
         }
         return t;
       })
@@ -716,7 +757,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          return { ...t, reminderFrequency: frequency };
+          const updated = { ...t, reminderFrequency: frequency } as PendingMoney;
+          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
+          return updated;
         }
         return t;
       })
@@ -728,54 +771,72 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          return { ...t, nextReminderDate: calculateNextDate(t.nextReminderDate, t.reminderFrequency) };
+          const updated = { ...t, nextReminderDate: calculateNextDate(t.nextReminderDate, t.reminderFrequency) } as PendingMoney;
+          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
+          return updated;
         }
         return t;
       })
     }));
   };
 
-  const markAsReceived = (id: string) => {
+  const markAsReceived = async (id: string) => {
     let targetTx: PendingMoney | undefined;
-    setState(prev => {
-      const tx = prev.transactions.find(t => t.id === id);
-      if (!tx || tx.type !== 'pending') return prev;
-      targetTx = tx;
+    let newReceived: ReceivedMoney | undefined;
+    let updatedPending: PendingMoney | undefined;
 
-      const updatedTx: PendingMoney = { ...tx, status: 'completed' };
-      
-      const newReceived: ReceivedMoney = {
-        id: crypto.randomUUID(),
-        type: 'received',
-        personName: tx.personName,
-        amount: tx.amount,
-        date: new Date().toISOString().split('T')[0],
-        purpose: `Settled: ${tx.reason}`,
-      };
+    const tx = state.transactions.find(t => t.id === id);
+    if (!tx || tx.type !== 'pending') return;
+    targetTx = tx;
 
-      return {
-        ...prev,
-        transactions: [
-          newReceived,
-          ...prev.transactions.map(t => t.id === id ? updatedTx : t)
-        ]
-      };
-    });
-    if (targetTx) {
-      createNotification({
-        title: 'Pending Payment Marked as Paid',
-        message: `Payment of ₹${Number(targetTx.amount).toLocaleString()} from ${targetTx.personName} marked as paid`,
-        type: 'pending_paid',
-        referenceId: id
-      });
+    updatedPending = { ...tx, status: 'completed' };
+    newReceived = {
+      id: crypto.randomUUID(),
+      type: 'received',
+      personName: tx.personName,
+      amount: tx.amount,
+      date: new Date().toISOString().split('T')[0],
+      purpose: `Settled: ${tx.reason}`,
+    };
+
+    setState(prev => ({
+      ...prev,
+      transactions: [
+        newReceived!,
+        ...prev.transactions.map(t => t.id === id ? updatedPending! : t)
+      ]
+    }));
+
+    if (currentUser?.uid) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, updatedPending);
+        await saveTransactionToFirestore(currentUser.uid, newReceived);
+      } catch (err) {
+        console.error("Error settling transaction in Firestore:", err);
+      }
     }
+
+    createNotification({
+      title: 'Pending Payment Marked as Paid',
+      message: `Payment of ₹${Number(targetTx.amount).toLocaleString()} from ${targetTx.personName} marked as paid`,
+      type: 'pending_paid',
+      referenceId: id
+    });
   };
 
-  const deleteTransaction = (id: string) => {
+  const deleteTransaction = async (id: string) => {
+    const targetTx = state.transactions.find(t => t.id === id);
     setState(prev => ({
       ...prev,
       transactions: prev.transactions.filter(t => t.id !== id)
     }));
+    if (currentUser?.uid) {
+      try {
+        await deleteTransactionFromFirestore(currentUser.uid, id, targetTx?.type);
+      } catch (err) {
+        console.error("Error deleting transaction from Firestore:", err);
+      }
+    }
     createNotification({
       title: 'Transaction Deleted',
       message: 'Transaction removed from ledger',
@@ -784,11 +845,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateTransaction = (id: string, updated: Partial<Transaction>) => {
+  const updateTransaction = async (id: string, updated: Partial<Transaction>) => {
+    let updatedTx: Transaction | undefined;
     setState(prev => ({
       ...prev,
-      transactions: prev.transactions.map(t => t.id === id ? { ...t, ...updated } as Transaction : t)
+      transactions: prev.transactions.map(t => {
+        if (t.id === id) {
+          updatedTx = { ...t, ...updated } as Transaction;
+          return updatedTx;
+        }
+        return t;
+      })
     }));
+    if (currentUser?.uid && updatedTx) {
+      try {
+        await saveTransactionToFirestore(currentUser.uid, updatedTx);
+      } catch (err) {
+        console.error("Error updating transaction in Firestore:", err);
+      }
+    }
     createNotification({
       title: 'Transaction Edited',
       message: 'Transaction details updated in ledger',
@@ -796,6 +871,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       referenceId: id
     });
   };
+
 
   const addGullakEntry = (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newEntry: GullakEntry = {
@@ -920,10 +996,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUserProfile = (profile: Partial<UserProfile>) => {
-    setState(prev => ({
-      ...prev,
-      userProfile: { ...(prev.userProfile || defaultState.userProfile!), ...profile }
-    }));
+    let updatedProfile: UserProfile | undefined;
+    setState(prev => {
+      updatedProfile = { ...(prev.userProfile || defaultState.userProfile!), ...profile };
+      return { ...prev, userProfile: updatedProfile };
+    });
+    if (currentUser?.uid && updatedProfile) {
+      saveUserProfileToFirestore(currentUser.uid, updatedProfile).catch(e => console.error(e));
+    }
     createNotification({
       title: 'Profile Updated Successfully',
       message: 'Your profile information has been updated',

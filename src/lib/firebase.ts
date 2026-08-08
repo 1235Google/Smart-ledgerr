@@ -4,7 +4,7 @@ import { getAuth } from 'firebase/auth';
 import config from '../../firebase-applet-config.json';
 
 const app = initializeApp(config);
-const db = getFirestore(app, config.firestoreDatabaseId);
+const db = config.firestoreDatabaseId ? getFirestore(app, config.firestoreDatabaseId) : getFirestore(app);
 const auth = getAuth(app);
 
 // Enable Firestore offline persistence

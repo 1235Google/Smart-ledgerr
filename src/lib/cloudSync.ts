@@ -22,10 +22,6 @@ export interface FirestoreErrorInfo {
     emailVerified?: boolean | null;
     isAnonymous?: boolean | null;
     tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
   };
 }
 
@@ -38,16 +34,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
     },
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Firestore Operation Notice:', JSON.stringify(errInfo));
+  return errInfo;
 }
 
 export const defaultProfile = (firebaseUser?: User | null): UserProfile => ({
@@ -78,7 +70,11 @@ export const defaultProfile = (firebaseUser?: User | null): UserProfile => ({
   activeDevice: 'Web Browser'
 });
 
-export const initializeUserWorkspace = async (userId: string, firebaseUser?: User | null, baseDefaultState?: AppState): Promise<AppState> => {
+export const initializeUserWorkspace = async (
+  userId: string, 
+  firebaseUser?: User | null, 
+  baseDefaultState?: AppState
+): Promise<AppState> => {
   const profile = defaultProfile(firebaseUser);
   const freshState: AppState = {
     ...(baseDefaultState || {
@@ -128,13 +124,24 @@ export const initializeUserWorkspace = async (userId: string, firebaseUser?: Use
   };
 
   try {
+    const userDocRef = doc(db, 'users', userId);
     const stateDocRef = doc(db, 'users', userId, 'app', 'state');
     const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
     const settingsDocRef = doc(db, 'users', userId, 'settings', 'data');
 
+    // 1. Create root user document
+    await setDoc(userDocRef, {
+      name: firebaseUser?.displayName || 'SmartLedger User',
+      email: firebaseUser?.email || '',
+      photoURL: firebaseUser?.photoURL || '',
+      createdAt: firebaseUser?.metadata?.creationTime || new Date().toISOString(),
+      lastLogin: new Date().toISOString()
+    }, { merge: true });
+
     const stateToSave = { ...freshState };
     delete (stateToSave as any).transactions;
 
+    // 2. Initialize state, profile, and settings documents
     await setDoc(stateDocRef, stateToSave, { merge: true });
     await setDoc(profileDocRef, profile, { merge: true });
     await setDoc(settingsDocRef, {
@@ -156,17 +163,30 @@ export const subscribeToState = (
   baseDefaultState: AppState,
   onUpdate: (state: AppState) => void
 ) => {
+  const userDocRef = doc(db, 'users', userId);
   const stateDocRef = doc(db, 'users', userId, 'app', 'state');
   const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
   const settingsDocRef = doc(db, 'users', userId, 'settings', 'data');
   const txCollectionRef = collection(db, 'users', userId, 'transactions');
+  const remCollectionRef = collection(db, 'users', userId, 'reminders');
+  const repCollectionRef = collection(db, 'users', userId, 'reports');
 
   let state: AppState | null = null;
   let userProfile: UserProfile | null = null;
   let settingsData: any = null;
   let transactions: Transaction[] = [];
+  let reminderHistory: any[] = [];
+  let generatedReports: any[] = [];
 
   let stateInitialized = false;
+
+  // Touch lastLogin on root user document for existing users
+  setDoc(userDocRef, {
+    name: firebaseUser?.displayName || 'SmartLedger User',
+    email: firebaseUser?.email || '',
+    photoURL: firebaseUser?.photoURL || '',
+    lastLogin: new Date().toISOString()
+  }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${userId}`));
 
   const checkAndEmitState = async () => {
     if (!state) {
@@ -192,7 +212,9 @@ export const subscribeToState = (
       emailSettings: settingsData?.emailSettings || state.emailSettings || baseDefaultState.emailSettings,
       generalSettings: settingsData?.generalSettings || state.generalSettings || baseDefaultState.generalSettings,
       gullakSettings: settingsData?.gullakSettings || state.gullakSettings || baseDefaultState.gullakSettings,
-      transactions: transactions
+      transactions: transactions,
+      reminderHistory: reminderHistory.length > 0 ? reminderHistory : (state.reminderHistory || []),
+      generatedReports: generatedReports.length > 0 ? generatedReports : (state.generatedReports || [])
     };
 
     onUpdate(updatedState);
@@ -224,11 +246,23 @@ export const subscribeToState = (
     checkAndEmitState();
   }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/transactions`));
 
+  const unsubRem = onSnapshot(remCollectionRef, (snapshot) => {
+    reminderHistory = snapshot.docs.map(d => d.data());
+    checkAndEmitState();
+  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/reminders`));
+
+  const unsubRep = onSnapshot(repCollectionRef, (snapshot) => {
+    generatedReports = snapshot.docs.map(d => d.data());
+    checkAndEmitState();
+  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/reports`));
+
   return () => {
     unsubState();
     unsubProfile();
     unsubSettings();
     unsubTx();
+    unsubRem();
+    unsubRep();
   };
 };
 
@@ -237,6 +271,8 @@ export const syncStateToCloud = async (
   previousState: AppState, 
   currentState: AppState
 ): Promise<void> => {
+  if (!userId) return;
+
   try {
     // 1. Transactions sync
     if (JSON.stringify(previousState.transactions) !== JSON.stringify(currentState.transactions)) {
@@ -304,6 +340,14 @@ export const syncStateToCloud = async (
       if (currentState.userProfile) {
         const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
         await setDoc(profileDocRef, currentState.userProfile, { merge: true });
+        
+        // Also update root user document
+        const userDocRef = doc(db, 'users', userId);
+        await setDoc(userDocRef, {
+          name: currentState.userProfile.fullName,
+          email: currentState.userProfile.email,
+          photoURL: currentState.userProfile.profilePhoto || currentState.userProfile.businessLogo
+        }, { merge: true });
       }
     }
 

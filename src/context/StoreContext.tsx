@@ -658,13 +658,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       type: 'received',
     };
-    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    let updatedTransactions: Transaction[] = [];
+    setState(prev => {
+      updatedTransactions = [newTx, ...prev.transactions];
+      return { ...prev, transactions: updatedTransactions };
+    });
     if (currentUser?.uid) {
       try {
+        console.log('[SAVE] Saving received transaction...', newTx.id);
         await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
+        console.log('[SAVE] Firestore write successful for received transaction');
       } catch (err) {
-        console.error("Error writing income to Firestore:", err);
+        console.error("[SAVE ERROR] Error writing income to Firestore:", err);
       }
     }
     createNotification({
@@ -687,13 +693,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       type: 'sent',
     };
-    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    let updatedTransactions: Transaction[] = [];
+    setState(prev => {
+      updatedTransactions = [newTx, ...prev.transactions];
+      return { ...prev, transactions: updatedTransactions };
+    });
     if (currentUser?.uid) {
       try {
+        console.log('[SAVE] Saving sent transaction...', newTx.id);
         await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
+        console.log('[SAVE] Firestore write successful for sent transaction');
       } catch (err) {
-        console.error("Error writing expense to Firestore:", err);
+        console.error("[SAVE ERROR] Error writing expense to Firestore:", err);
       }
     }
     createNotification({
@@ -719,13 +731,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       reminderStatus: 'active',
       nextReminderDate: entry.dueDate || new Date().toISOString().split('T')[0],
     };
-    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
+    let updatedTransactions: Transaction[] = [];
+    setState(prev => {
+      updatedTransactions = [newTx, ...prev.transactions];
+      return { ...prev, transactions: updatedTransactions };
+    });
     if (currentUser?.uid) {
       try {
+        console.log('[SAVE] Saving pending transaction...', newTx.id);
         await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: [newTx, ...state.transactions] });
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
+        console.log('[SAVE] Firestore write successful for pending transaction');
       } catch (err) {
-        console.error("Error writing pending money to Firestore:", err);
+        console.error("[SAVE ERROR] Error writing pending money to Firestore:", err);
       }
     }
     createNotification({
@@ -737,102 +755,116 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleReminderStatus = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => {
+    setState(prev => {
+      const updatedTransactions = prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
           const updated = { ...t, reminderStatus: t.reminderStatus === 'active' ? 'paused' : 'active' } as PendingMoney;
           if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
           return updated;
         }
         return t;
-      })
-    }));
+      });
+      return { ...prev, transactions: updatedTransactions };
+    });
   };
 
   const updateReminderFrequency = (id: string, frequency: PendingMoney['reminderFrequency']) => {
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => {
+    setState(prev => {
+      const updatedTransactions = prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
           const updated = { ...t, reminderFrequency: frequency } as PendingMoney;
           if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
           return updated;
         }
         return t;
-      })
-    }));
+      });
+      return { ...prev, transactions: updatedTransactions };
+    });
   };
 
   const advanceReminderDate = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => {
+    setState(prev => {
+      const updatedTransactions = prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
           const updated = { ...t, nextReminderDate: calculateNextDate(t.nextReminderDate, t.reminderFrequency) } as PendingMoney;
           if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
           return updated;
         }
         return t;
-      })
-    }));
+      });
+      return { ...prev, transactions: updatedTransactions };
+    });
   };
 
   const markAsReceived = async (id: string) => {
     let targetTx: PendingMoney | undefined;
     let newReceived: ReceivedMoney | undefined;
     let updatedPending: PendingMoney | undefined;
+    let updatedTransactions: Transaction[] = [];
 
-    const tx = state.transactions.find(t => t.id === id);
-    if (!tx || tx.type !== 'pending') return;
-    targetTx = tx;
+    setState(prev => {
+      const tx = prev.transactions.find(t => t.id === id);
+      if (!tx || tx.type !== 'pending') return prev;
+      targetTx = tx;
 
-    updatedPending = { ...tx, status: 'completed' };
-    newReceived = {
-      id: crypto.randomUUID(),
-      type: 'received',
-      personName: tx.personName,
-      amount: tx.amount,
-      date: new Date().toISOString().split('T')[0],
-      purpose: `Settled: ${tx.reason}`,
-    };
+      updatedPending = { ...tx, status: 'completed' };
+      newReceived = {
+        id: crypto.randomUUID(),
+        type: 'received',
+        personName: tx.personName,
+        amount: tx.amount,
+        date: new Date().toISOString().split('T')[0],
+        purpose: `Settled: ${tx.reason}`,
+      };
 
-    setState(prev => ({
-      ...prev,
-      transactions: [
+      updatedTransactions = [
         newReceived!,
         ...prev.transactions.map(t => t.id === id ? updatedPending! : t)
-      ]
-    }));
+      ];
 
-    if (currentUser?.uid) {
+      return {
+        ...prev,
+        transactions: updatedTransactions
+      };
+    });
+
+    if (currentUser?.uid && updatedPending && newReceived) {
       try {
+        console.log('[SAVE] Settling pending transaction in Firestore...');
         await saveTransactionToFirestore(currentUser.uid, updatedPending);
         await saveTransactionToFirestore(currentUser.uid, newReceived);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
       } catch (err) {
-        console.error("Error settling transaction in Firestore:", err);
+        console.error("[SAVE ERROR] Error settling transaction in Firestore:", err);
       }
     }
 
-    createNotification({
-      title: 'Pending Payment Marked as Paid',
-      message: `Payment of ₹${Number(targetTx.amount).toLocaleString()} from ${targetTx.personName} marked as paid`,
-      type: 'pending_paid',
-      referenceId: id
-    });
+    if (targetTx) {
+      createNotification({
+        title: 'Pending Payment Marked as Paid',
+        message: `Payment of ₹${Number(targetTx.amount).toLocaleString()} from ${targetTx.personName} marked as paid`,
+        type: 'pending_paid',
+        referenceId: id
+      });
+    }
   };
 
   const deleteTransaction = async (id: string) => {
-    const targetTx = state.transactions.find(t => t.id === id);
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.filter(t => t.id !== id)
-    }));
+    let targetTx: Transaction | undefined;
+    let updatedTransactions: Transaction[] = [];
+    setState(prev => {
+      targetTx = prev.transactions.find(t => t.id === id);
+      updatedTransactions = prev.transactions.filter(t => t.id !== id);
+      return { ...prev, transactions: updatedTransactions };
+    });
     if (currentUser?.uid) {
       try {
+        console.log('[DELETE] Deleting transaction...', id);
         await deleteTransactionFromFirestore(currentUser.uid, id, targetTx?.type);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
+        console.log('[DELETE] Successfully deleted transaction from Firestore');
       } catch (err) {
-        console.error("Error deleting transaction from Firestore:", err);
+        console.error("[DELETE ERROR] Error deleting transaction from Firestore:", err);
       }
     }
     createNotification({
@@ -845,21 +877,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const updateTransaction = async (id: string, updated: Partial<Transaction>) => {
     let updatedTx: Transaction | undefined;
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => {
+    let updatedTransactions: Transaction[] = [];
+    setState(prev => {
+      updatedTransactions = prev.transactions.map(t => {
         if (t.id === id) {
           updatedTx = { ...t, ...updated } as Transaction;
           return updatedTx;
         }
         return t;
-      })
-    }));
+      });
+      return { ...prev, transactions: updatedTransactions };
+    });
     if (currentUser?.uid && updatedTx) {
       try {
+        console.log('[SAVE] Updating transaction...', id);
         await saveTransactionToFirestore(currentUser.uid, updatedTx);
+        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
+        console.log('[SAVE] Successfully updated transaction in Firestore');
       } catch (err) {
-        console.error("Error updating transaction in Firestore:", err);
+        console.error("[SAVE ERROR] Error updating transaction in Firestore:", err);
       }
     }
     createNotification({
@@ -1042,8 +1078,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const importData = (data: AppState) => {
+  const importData = async (data: AppState) => {
     setState(data);
+    if (currentUser?.uid) {
+      try {
+        console.log('[IMPORT] Saving imported transactions to Firestore...');
+        if (data.transactions && Array.isArray(data.transactions)) {
+          for (const tx of data.transactions) {
+            await saveTransactionToFirestore(currentUser.uid, tx);
+          }
+        }
+        await saveAppStateToFirestore(currentUser.uid, data);
+        console.log('[IMPORT] Successfully synced imported data to Firestore.');
+      } catch (err) {
+        console.error('[IMPORT ERROR] Error saving imported data to Firestore:', err);
+      }
+    }
     createNotification({
       title: 'Import Completed',
       message: 'Ledger data imported successfully',

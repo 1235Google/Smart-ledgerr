@@ -147,6 +147,8 @@ export const initializeUserWorkspace = async (
 
 export const saveTransactionToFirestore = async (userId: string, tx: Transaction): Promise<void> => {
   if (!userId || !tx || !tx.id) return;
+  const path = `users/${userId}/transactions/${tx.id}`;
+  console.log(`[Firestore Write Start] UID: ${userId} | Path: ${path} | Type: ${tx.type} | Amount: ₹${tx.amount}`);
   try {
     const txRef = doc(db, 'users', userId, 'transactions', tx.id);
     await setDoc(txRef, tx, { merge: true });
@@ -159,8 +161,16 @@ export const saveTransactionToFirestore = async (userId: string, tx: Transaction
     } else if (tx.type === 'sent') {
       await setDoc(doc(db, 'users', userId, 'sent', tx.id), tx, { merge: true });
     }
+
+    // Immediate Read Verification to guarantee persistence
+    const verifySnap = await getDoc(txRef);
+    if (verifySnap.exists()) {
+      console.log(`[Firestore Write Verification SUCCESS] Document exists at ${path}:`, verifySnap.data());
+    } else {
+      console.error(`[Firestore Write Verification WARNING] Document at ${path} was not found immediately after write!`);
+    }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/transactions/${tx.id}`);
+    handleFirestoreError(error, OperationType.WRITE, path);
     throw error;
   }
 };

@@ -226,13 +226,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
           if (isFromCloud) {
             isSnapshotUpdateRef.current = true;
+            setIsDataLoaded(true);
+            setIsLoading(false);
+          } else {
+            // If local cache has data, we can unhide loading spinner immediately
+            if (newState.transactions && newState.transactions.length > 0) {
+              setIsDataLoaded(true);
+              setIsLoading(false);
+            }
           }
-          console.log('[Lifecycle] Firestore Loaded - Dashboard Ready');
+          console.log('[Lifecycle] Firestore Snapshot Sync - UID:', user.uid, '| Transactions count:', newState.transactions?.length || 0);
           setState(newState);
           prevStateRef.current = newState;
-          setIsDataLoaded(true);
-          setIsLoading(false);
-          console.log('[Lifecycle] Loader Hidden');
         });
       } else {
         setIsAuthenticated(false);
@@ -245,7 +250,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         prevStateRef.current = defaultState;
         setIsDataLoaded(true);
         setIsLoading(false);
-        console.log('[Lifecycle] User logged out - Loader Hidden');
+        console.log('[Lifecycle] User logged out - Resetting workspace state');
       }
     });
 
@@ -256,21 +261,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Offline local fallback when unauthenticated
   useEffect(() => {
-    if (isDataLoaded) {
-      if (isSnapshotUpdateRef.current) {
-        isSnapshotUpdateRef.current = false;
-        prevStateRef.current = state;
-        return;
-      }
-      if (isAuthenticated && currentUser) {
-        syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
-      } else {
+    if (!isAuthenticated) {
+      try {
         localStorage.setItem('smart-ledger-data', JSON.stringify(state));
-      }
-      prevStateRef.current = state;
+      } catch (e) {}
     }
-  }, [state, isAuthenticated, currentUser, isDataLoaded]);
+  }, [state, isAuthenticated]);
 
   const loginWithPin = (pin: string): boolean => {
     if (!pin || pin.length !== 4) return false;
@@ -880,21 +878,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setState(prev => ({ ...prev, gullakEntries: [newEntry, ...(prev.gullakEntries || [])] }));
+    setState(prev => {
+      const next = { ...prev, gullakEntries: [newEntry, ...(prev.gullakEntries || [])] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateGullakEntry = (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => {
-    setState(prev => ({
-      ...prev,
-      gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? { ...e, ...entry, updatedAt: new Date().toISOString() } : e)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? { ...e, ...entry, updatedAt: new Date().toISOString() } : e)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteGullakEntry = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      gullakEntries: (prev.gullakEntries || []).filter(e => e.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        gullakEntries: (prev.gullakEntries || []).filter(e => e.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addSavingsGoal = (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => {
@@ -903,21 +913,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
-    setState(prev => ({ ...prev, savingsGoals: [...(prev.savingsGoals || []), newGoal] }));
+    setState(prev => {
+      const next = { ...prev, savingsGoals: [...(prev.savingsGoals || []), newGoal] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateSavingsGoal = (id: string, goal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => {
-    setState(prev => ({
-      ...prev,
-      savingsGoals: (prev.savingsGoals || []).map(g => g.id === id ? { ...g, ...goal } : g)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        savingsGoals: (prev.savingsGoals || []).map(g => g.id === id ? { ...g, ...goal } : g)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteSavingsGoal = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      savingsGoals: (prev.savingsGoals || []).filter(g => g.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        savingsGoals: (prev.savingsGoals || []).filter(g => g.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addSecurityLog = (log: Omit<SecurityLog, 'id'>) => {

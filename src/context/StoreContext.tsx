@@ -184,27 +184,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
+    console.log('[Lifecycle] App Started - initializing Firebase Auth Listener');
     let unsubscribeFirestore: (() => void) | undefined;
+    let safetyTimeout: NodeJS.Timeout | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('[Lifecycle] Auth Ready - User status:', user ? `User Logged In (${user.uid})` : 'No User');
       setCurrentUser(user);
 
       if (unsubscribeFirestore) {
         unsubscribeFirestore();
         unsubscribeFirestore = undefined;
       }
-      
+
+      if (safetyTimeout) {
+        clearTimeout(safetyTimeout);
+        safetyTimeout = null;
+      }
+
       if (user) {
         setIsAuthenticated(true);
         setIsLoading(true);
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
-        
+
+        console.log('[Lifecycle] Fetching Firestore data for user:', user.uid);
+
+        // Safety timeout to guarantee loader hiding after 5s max
+        safetyTimeout = setTimeout(() => {
+          console.warn('[Lifecycle] Safety timeout reached - hiding loader and showing workspace');
+          setIsLoading(false);
+          setIsDataLoaded(true);
+        }, 5000);
+
         unsubscribeFirestore = subscribeToState(user.uid, user, defaultState, (newState) => {
+          if (safetyTimeout) {
+            clearTimeout(safetyTimeout);
+            safetyTimeout = null;
+          }
+          console.log('[Lifecycle] Firestore Loaded - Dashboard Ready');
           setState(newState);
           prevStateRef.current = newState;
           setIsDataLoaded(true);
           setIsLoading(false);
+          console.log('[Lifecycle] Loader Hidden');
         });
       } else {
         setIsAuthenticated(false);
@@ -217,11 +241,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         prevStateRef.current = defaultState;
         setIsDataLoaded(true);
         setIsLoading(false);
+        console.log('[Lifecycle] User logged out - Loader Hidden');
       }
     });
 
     return () => {
       unsubscribe();
+      if (safetyTimeout) clearTimeout(safetyTimeout);
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, []);

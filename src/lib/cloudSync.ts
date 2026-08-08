@@ -163,6 +163,33 @@ export const subscribeToState = (
   baseDefaultState: AppState,
   onUpdate: (state: AppState) => void
 ) => {
+  const cacheKey = `smartledger_user_cache_${userId}`;
+  let currentState: AppState = {
+    ...baseDefaultState,
+    userProfile: defaultProfile(firebaseUser)
+  };
+
+  // 1. Try restoring from local cache immediately for zero-delay startup
+  try {
+    const cachedRaw = localStorage.getItem(cacheKey);
+    if (cachedRaw) {
+      const parsed = JSON.parse(cachedRaw);
+      currentState = {
+        ...currentState,
+        ...parsed,
+        userProfile: {
+          ...currentState.userProfile,
+          ...(parsed.userProfile || {})
+        }
+      };
+    }
+  } catch (e) {
+    console.warn('Could not read user cache:', e);
+  }
+
+  // Immediately notify listener so UI renders instantly without waiting for network
+  onUpdate(currentState);
+
   const userDocRef = doc(db, 'users', userId);
   const stateDocRef = doc(db, 'users', userId, 'app', 'state');
   const profileDocRef = doc(db, 'users', userId, 'profile', 'data');
@@ -171,16 +198,16 @@ export const subscribeToState = (
   const remCollectionRef = collection(db, 'users', userId, 'reminders');
   const repCollectionRef = collection(db, 'users', userId, 'reports');
 
-  let state: AppState | null = null;
-  let userProfile: UserProfile | null = null;
+  let stateDocData: Partial<AppState> | null = null;
+  let userProfileData: UserProfile | null = null;
   let settingsData: any = null;
-  let transactions: Transaction[] = [];
-  let reminderHistory: any[] = [];
-  let generatedReports: any[] = [];
+  let transactionsData: Transaction[] | null = null;
+  let reminderData: any[] | null = null;
+  let reportsData: any[] | null = null;
 
-  let stateInitialized = false;
+  let workspaceInitializing = false;
 
-  // Touch lastLogin on root user document for existing users
+  // Touch lastLogin on root user document
   setDoc(userDocRef, {
     name: firebaseUser?.displayName || 'SmartLedger User',
     email: firebaseUser?.email || '',
@@ -188,73 +215,96 @@ export const subscribeToState = (
     lastLogin: new Date().toISOString()
   }, { merge: true }).catch(err => handleFirestoreError(err, OperationType.WRITE, `users/${userId}`));
 
-  const checkAndEmitState = async () => {
-    if (!state) {
-      if (!stateInitialized) {
-        stateInitialized = true;
-        const fresh = await initializeUserWorkspace(userId, firebaseUser, baseDefaultState);
-        onUpdate(fresh);
-      }
-      return;
-    }
-
-    const mergedProfile = userProfile || state.userProfile || defaultProfile(firebaseUser);
-    const updatedState: AppState = {
+  const emitMergedState = () => {
+    const mergedProfile = userProfileData || stateDocData?.userProfile || currentState.userProfile || defaultProfile(firebaseUser);
+    
+    currentState = {
       ...baseDefaultState,
-      ...state,
+      ...(stateDocData || {}),
       userProfile: {
         ...mergedProfile,
         profilePhoto: mergedProfile.profilePhoto || firebaseUser?.photoURL || '',
         fullName: mergedProfile.fullName || firebaseUser?.displayName || 'SmartLedger User',
         email: mergedProfile.email || firebaseUser?.email || ''
       },
-      securitySettings: settingsData?.securitySettings || state.securitySettings || baseDefaultState.securitySettings,
-      emailSettings: settingsData?.emailSettings || state.emailSettings || baseDefaultState.emailSettings,
-      generalSettings: settingsData?.generalSettings || state.generalSettings || baseDefaultState.generalSettings,
-      gullakSettings: settingsData?.gullakSettings || state.gullakSettings || baseDefaultState.gullakSettings,
-      transactions: transactions,
-      reminderHistory: reminderHistory.length > 0 ? reminderHistory : (state.reminderHistory || []),
-      generatedReports: generatedReports.length > 0 ? generatedReports : (state.generatedReports || [])
+      securitySettings: settingsData?.securitySettings || stateDocData?.securitySettings || currentState.securitySettings || baseDefaultState.securitySettings,
+      emailSettings: settingsData?.emailSettings || stateDocData?.emailSettings || currentState.emailSettings || baseDefaultState.emailSettings,
+      generalSettings: settingsData?.generalSettings || stateDocData?.generalSettings || currentState.generalSettings || baseDefaultState.generalSettings,
+      gullakSettings: settingsData?.gullakSettings || stateDocData?.gullakSettings || currentState.gullakSettings || baseDefaultState.gullakSettings,
+      transactions: transactionsData !== null ? transactionsData : (currentState.transactions || []),
+      reminderHistory: reminderData !== null ? reminderData : (currentState.reminderHistory || []),
+      generatedReports: reportsData !== null ? reportsData : (currentState.generatedReports || [])
     };
 
-    onUpdate(updatedState);
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(currentState));
+    } catch (e) {}
+
+    onUpdate(currentState);
   };
 
   const unsubState = onSnapshot(stateDocRef, (snapshot) => {
     if (snapshot.exists()) {
-      state = snapshot.data() as AppState;
+      stateDocData = snapshot.data() as AppState;
+      emitMergedState();
+    } else if (!workspaceInitializing) {
+      workspaceInitializing = true;
+      initializeUserWorkspace(userId, firebaseUser, baseDefaultState).then((fresh) => {
+        stateDocData = fresh;
+        emitMergedState();
+      }).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, `users/${userId}`);
+        emitMergedState();
+      });
     }
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/app/state`));
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/app/state`);
+    emitMergedState();
+  });
 
   const unsubProfile = onSnapshot(profileDocRef, (snapshot) => {
     if (snapshot.exists()) {
-      userProfile = snapshot.data() as UserProfile;
+      userProfileData = snapshot.data() as UserProfile;
     }
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/profile/data`));
+    emitMergedState();
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/profile/data`);
+    emitMergedState();
+  });
 
   const unsubSettings = onSnapshot(settingsDocRef, (snapshot) => {
     if (snapshot.exists()) {
       settingsData = snapshot.data();
     }
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/settings/data`));
+    emitMergedState();
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/settings/data`);
+    emitMergedState();
+  });
 
   const unsubTx = onSnapshot(txCollectionRef, (snapshot) => {
-    transactions = snapshot.docs.map(d => d.data() as Transaction);
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/transactions`));
+    transactionsData = snapshot.docs.map(d => d.data() as Transaction);
+    emitMergedState();
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/transactions`);
+    emitMergedState();
+  });
 
   const unsubRem = onSnapshot(remCollectionRef, (snapshot) => {
-    reminderHistory = snapshot.docs.map(d => d.data());
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/reminders`));
+    reminderData = snapshot.docs.map(d => d.data());
+    emitMergedState();
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/reminders`);
+    emitMergedState();
+  });
 
   const unsubRep = onSnapshot(repCollectionRef, (snapshot) => {
-    generatedReports = snapshot.docs.map(d => d.data());
-    checkAndEmitState();
-  }, (err) => handleFirestoreError(err, OperationType.GET, `users/${userId}/reports`));
+    reportsData = snapshot.docs.map(d => d.data());
+    emitMergedState();
+  }, (err) => {
+    handleFirestoreError(err, OperationType.GET, `users/${userId}/reports`);
+    emitMergedState();
+  });
 
   return () => {
     unsubState();
